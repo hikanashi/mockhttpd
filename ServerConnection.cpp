@@ -181,7 +181,7 @@ int ServerConnection::readcb(struct bufferevent *bev)
 
 	warnx(">>>>>>>> ServerConnection::readcb(start size: %lu) >>>>>>>>",datalen);
 //	warnx("%30.30s",data);
-	warnx("%s",data);
+//	warnx("%s",data);
 	util::dumpbinary(data,datalen);
 
 

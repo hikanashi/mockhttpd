@@ -5,6 +5,7 @@
 #include "UpSessionHttp.h"
 #include "ServerAcceptHandler.h"
 #include "ResponseRule.h"
+#include "GzipInflater.h"
 
 
 UpSessionHttp::UpSessionHttp(ServerConnection& handler)
@@ -275,19 +276,6 @@ ssize_t UpSessionHttp::DoFlush()
 		return 0;
 	}
 
-	// 
-	//HttpHeaderField* cefield = nullptr;
-	//cefield = req->headers.get("Content-Encoding");
-	//if (cefield != nullptr &&
-	//	cefield->value.find("gzip",0) != std::string::npos )
-	//{
-	//	// BODY compless deflate gzip
-	//	// BODY data write file
-	//	// and logout filename
-	//	;
-	//}
-
-
 	std::unique_ptr<HttpMessage> response(new HttpResponse());
 	HttpResponse& res = *dynamic_cast<HttpResponse*>(response.get());
 
@@ -301,19 +289,37 @@ ssize_t UpSessionHttp::DoFlush()
 		return -1;
 	}
 
-	ssize_t ret = 0;		
-	ret = rule->setResponse(req,res);
 
-
-	// @TODO
-	// Accept-Encoding is gzip so inflate gzip.
-	HttpHeaderField* aefield = nullptr;
-	aefield = res.headers.get("Accept-Encoding");
-	if (aefield != nullptr)
+	GzipInflater decomp(req.payload.size(), 1024);
+	
+	HttpHeaderField* cefield = nullptr;
+	cefield = req.headers.get("Content-Encoding");
+	if (cefield != nullptr &&
+		cefield->value.find("gzip",0) != std::string::npos )
 	{
-		// gzip res->inflater
-		// response append Contents-Encoding:gzip
-		;
+		size_t decompsize = req.payload.size();
+		decomp.inflate(req.payload.pos(), &decompsize);
+	}
+
+	ssize_t ret = 0;
+	if (decomp.IsFinished() == true)
+	{
+		ret = rule->CheckRequest(req, decomp.data(), decomp.size());
+	}
+	else
+	{
+		ret = rule->CheckRequest(req, NULL, 0);
+	}
+
+	if (ret < 0)
+	{
+		return ret;
+	}
+		
+	ret = rule->setResponse(req,res);
+	if (ret < 0)
+	{
+		return ret;
 	}
 
 	send(response);

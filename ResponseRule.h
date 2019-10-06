@@ -15,6 +15,11 @@ public:
 	
 	virtual bool IsDeleteRule() = 0;
 	
+	virtual int CheckRequest(
+		HttpRequest&	req,
+		const uint8_t*	unzip_data,
+		size_t			unzip_size) = 0;
+
 	virtual ssize_t setResponse(
 							HttpRequest&  req,
 							HttpResponse& res) = 0;

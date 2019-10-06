@@ -31,11 +31,6 @@ protected:
 				uint16_t&	port,
 				std::string& path);
 
-	int deflate(
-			HttpMessage*	message);
-	int deflateEnd(
-			HttpMessage*	message);
-
 protected:
 	ServerConnection &handler_;
 };

@@ -6,8 +6,6 @@
 #include <string.h>
 #include <vector>
 #include "MemBuff.h"
-#include "GzipInflater.h"
-#include "GzipDeflater.h"
 
 struct ci_char_traits : public std::char_traits < char >
 {
@@ -176,7 +174,6 @@ typedef struct HttpRequest : public HttpMessage
 	std::string scheme;
 	std::string authority;
 	std::string path;
-	std::unique_ptr<GzipDeflater> deflater;
 	HttpRequest()
 		: host()
 		, port(0)
@@ -185,7 +182,6 @@ typedef struct HttpRequest : public HttpMessage
 		, scheme()
 		, authority()
 		, path()
-		, deflater()
 	{}
 	virtual ~HttpRequest() {}
 } HttpRequest;
@@ -195,11 +191,9 @@ typedef struct HttpResponse : public HttpMessage
 {
 	unsigned int status_code;
 	std::string reason;
-	std::unique_ptr<GzipInflater> inflater;
 	HttpResponse()
 		: status_code(0)
 		, reason()
-		, inflater()
 	{}
 	virtual ~HttpResponse() {}
 } HttpResponse;

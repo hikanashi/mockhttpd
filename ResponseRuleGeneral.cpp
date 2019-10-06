@@ -1,6 +1,7 @@
 #include "ResponseRuleGeneral.h"
 #include "http-parser/http_parser.h"
 #include <algorithm>
+#include "GzipDeflater.h"
 
 ResponseRuleGeneral::ResponseRuleGeneral()
 	: ResponseRule() 
@@ -12,6 +13,7 @@ ResponseRuleGeneral::ResponseRuleGeneral()
 	, close_no_response_(false)
 	, response_code_(404)
 	, response_headers_()
+	, response_compress_(true)
 	, body_()
 	, count_(1)
 {
@@ -28,6 +30,7 @@ ResponseRuleGeneral::ResponseRuleGeneral(
 	, close_no_response_(false)
 	, response_code_(responce_code)
 	, response_headers_()
+	, response_compress_(true)
 	, body_()
 	, count_(1)
 {
@@ -115,6 +118,22 @@ bool ResponseRuleGeneral::IsDeleteRule()
 	return true;
 }
 
+int ResponseRuleGeneral::CheckRequest(
+	HttpRequest&	req,
+	const uint8_t*	unzip_data,
+	size_t			unzip_size)
+{
+	int ret = 0;
+
+	if (check_function)
+	{
+		ret = check_function(req, unzip_data, unzip_size);
+	}
+
+	return 0;
+}
+
+
 ssize_t ResponseRuleGeneral::setResponse(
 							HttpRequest&  req,
 							HttpResponse& res)
@@ -142,9 +161,27 @@ ssize_t ResponseRuleGeneral::setResponse(
 				headfield.value.c_str());
 	}
 
-	res.payload.add(
-				(const uint8_t*)body_.c_str(),
-				body_.size());
+	if(	body_.size() > 0 &&
+		response_compress_ != false)
+	{
+		size_t compsize = body_.size();
+		GzipDeflater comp(compsize, 1024);
+		comp.deflate( (const uint8_t*)body_.c_str(), &compsize, true);
+
+		res.payload.add(
+			comp.data(),
+			comp.size());
+
+		res.headers.append(
+			"Content-Encoding",
+			"gzip");
+	}
+	else
+	{
+		res.payload.add(
+			(const uint8_t*)body_.c_str(),
+			body_.size());
+	}
 
 	return 0;
 }
