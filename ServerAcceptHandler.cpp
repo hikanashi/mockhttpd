@@ -64,38 +64,11 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, connections_()
 	, response_rule_()
 	, response_mutex(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
+	, timerev_(nullptr)
+	, listener_(nullptr)
 {
 	timerev_ = evtimer_new(
 					event_.getEventBase(), timercb, this );
-
-#ifdef _WIN32
-	int err = 0;  
-	WSADATA wsaData;
-	err = WSAStartup(MAKEWORD(2, 0), &wsaData);
-	if (err != 0) 
-	{
-		switch (err) {
-		case WSASYSNOTREADY:
-			warnx("WSAStartup:WSASYSNOTREADY");
-			break;
-		case WSAVERNOTSUPPORTED:
-			warnx("WSAStartup:WSAVERNOTSUPPORTED");
-			break;
-		case WSAEINPROGRESS:
-			warnx("WSAStartup:WSAEINPROGRESS");
-			break;
-		case WSAEPROCLIM:
-			warnx("WSAStartup:WSAEPROCLIM");
-			break;
-		case WSAEFAULT:
-			warnx("WSAStartup:WSAEFAULT");
-			break;
-		default:
-			warnx("WSAStartup:%d", err);
-			break;
-		}
-	}
-#endif
 
 	if (setting_.enable_tls)
 	{
@@ -112,6 +85,12 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 
 ServerAcceptHandler::~ServerAcceptHandler()
 {
+	if (listener_ != nullptr)
+	{
+		evconnlistener_free(listener_);
+		listener_ = nullptr;
+	}
+
 	stop();
 
 	if (ssl_ctx_ != setting_.ssl_ctx)
@@ -254,6 +233,7 @@ void ServerAcceptHandler::start_listen()
 
 	if(listener != nullptr)
 	{
+		listener_ = listener;
 		event_.loop();
 	}
 	else

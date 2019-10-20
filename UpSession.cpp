@@ -87,15 +87,15 @@ int UpSession::parseURI(const char* uri,
 	if (u.field_set & (1 << UF_QUERY))
 	{
 		path.append(
-				&uri[u.field_data[UF_QUERY].off],
-				u.field_data[UF_QUERY].len);
+				&uri[u.field_data[UF_QUERY].off-1],
+				u.field_data[UF_QUERY].len+1);
 	}
 
 	if (u.field_set & (1 << UF_FRAGMENT))
 	{
 		path.append(
-				&uri[u.field_data[UF_FRAGMENT].off],
-				u.field_data[UF_FRAGMENT].len);
+				&uri[u.field_data[UF_FRAGMENT].off-1],
+				u.field_data[UF_FRAGMENT].len+1);
 	}
 
 

@@ -65,6 +65,7 @@ private:
 	std::vector< ResponseRulePtr > response_rule_;
 	pthread_mutex_t  response_mutex;
 	struct event*	timerev_;
+	struct evconnlistener* listener_;
 	
 
 };
