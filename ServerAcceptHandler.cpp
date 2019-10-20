@@ -42,8 +42,7 @@ static void acceptcb(
         struct sockaddr *addr, int addrlen, void *arg)
 {
 	ServerAcceptHandler* acceptHandler = static_cast<ServerAcceptHandler *>(arg);
-	(void)listener;
-	acceptHandler->accept(fd, addr, addrlen);
+	acceptHandler->accept(listener,fd, addr, addrlen);
 }
 
 static void timercb(
@@ -61,11 +60,12 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, event_()
 	, setting_(setting)
 	, ssl_ctx_(nullptr)
+	, ssl_socket_(0)
 	, connections_()
 	, response_rule_()
 	, response_mutex(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
 	, timerev_(nullptr)
-	, listener_(nullptr)
+	, listeners_()
 {
 	timerev_ = evtimer_new(
 					event_.getEventBase(), timercb, this );
@@ -85,11 +85,14 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 
 ServerAcceptHandler::~ServerAcceptHandler()
 {
-	if (listener_ != nullptr)
+
+	auto itr = listeners_.begin();
+	while (itr != listeners_.end())
 	{
-		evconnlistener_free(listener_);
-		listener_ = nullptr;
+		evconnlistener_free((*itr));
+		itr = listeners_.erase(itr);
 	}
+
 
 	stop();
 
@@ -196,12 +199,69 @@ int32_t ServerAcceptHandler::server_setup_certs(
 
 void ServerAcceptHandler::start_listen()
 {
+	struct evconnlistener* listener = nullptr;
+
+	listener = bind_port(
+		setting_.node.c_str(),
+		setting_.port_http.c_str());
+	if (listener != nullptr)
+	{
+		listeners_.push_back(listener);
+
+		warnx("http server start node:%s port:%s",
+			setting_.node.c_str(), setting_.port_http.c_str() );
+
+	}
+	else
+	{
+		warnx("Error: Can't http server start node:%s port:%s", 
+			setting_.node.c_str(), setting_.port_http.c_str());
+	}
+
+	if (setting_.enable_tls)
+	{
+		listener = bind_port(
+			setting_.node.c_str(),
+			setting_.port_https.c_str());
+		if (listener != nullptr)
+		{
+			ssl_socket_ = evconnlistener_get_fd(listener);
+			listeners_.push_back(listener);
+
+			warnx("https server start node:%s port:%s(%d)",
+				setting_.node.c_str(), setting_.port_https.c_str(), ssl_socket_);
+
+		}
+		else
+		{
+			warnx("Error: Can't https server start node:%s port:%s",
+				setting_.node.c_str(), setting_.port_https.c_str());
+		}
+	}
+
+
+	if(listeners_.size() > 0)
+	{
+		event_.loop();
+	}
+	else
+	{
+		errx(1, "Could not start no listener");
+	}
+
+	warnx("stop server");
+}
+
+struct evconnlistener* ServerAcceptHandler::bind_port(
+	const char*	node,
+	const char* service)
+{
+
 	struct event_base *evbase = event_.getEventBase();
 	int rv;
 	struct addrinfo hints;
 	struct addrinfo *res, *rp;
 	struct evconnlistener *listener = nullptr;
-	const char* service = setting_.port.c_str();
 
 
 	memset(&hints, 0, sizeof(hints));
@@ -212,51 +272,56 @@ void ServerAcceptHandler::start_listen()
 	hints.ai_flags |= AI_ADDRCONFIG;
 #endif /* AI_ADDRCONFIG */
 
-	rv = getaddrinfo(NULL, service, &hints, &res);
-	if (rv != 0) {
-		errx(1, "Could not resolve server address");
-		return;
+	rv = getaddrinfo(node, service, &hints, &res);
+	if (rv != 0) 
+	{
+		errx(1, "Could not resolve server address node:%s service:%s", node, service);
+		return nullptr;
 	}
-	for (rp = res; rp; rp = rp->ai_next) {
+	
+	for (rp = res; rp; rp = rp->ai_next)
+	{
 		listener = evconnlistener_new_bind(
-						evbase, acceptcb, this,
-						LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, 16, rp->ai_addr,
-						(int) rp->ai_addrlen);
+			evbase, acceptcb, this,
+			LEV_OPT_CLOSE_ON_FREE | LEV_OPT_REUSEABLE, 16, rp->ai_addr,
+			(int)rp->ai_addrlen);
+		
 		if (listener)
 		{
-			warnx("sample start port:%s", service);
 			freeaddrinfo(res);
 			break;
 		}
+
 		listener = nullptr;
 	}
 
-	if(listener != nullptr)
-	{
-		listener_ = listener;
-		event_.loop();
-	}
-	else
-	{
-		errx(1, "Could not start listener: %s", service);
-	}
-
-	warnx("stop server %s", service);
+	return listener;
 }
 
-void ServerAcceptHandler::accept(evutil_socket_t fd, struct sockaddr *addr, int64_t addrlen)
+void ServerAcceptHandler::accept(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *addr, int64_t addrlen)
 {
-	warnx("accept %d %s",fd, setting_.port.c_str());
+	warnx("accept %d",fd);
+
 
 	if (evtimer_pending(timerev_,NULL) != 0)
 	{
 		evtimer_del(timerev_);
 	}
 
-	switchthread();
-	ServerConnection*   serverCon;
-	serverCon = new ServerConnection(*this,fd, addr, addrlen, setting_.use_proxymode, ssl_ctx_);
 
+	switchthread();
+	ServerConnection*   serverCon = nullptr;
+	
+	evutil_socket_t accept_fd = evconnlistener_get_fd(listener);
+	if (ssl_socket_ == accept_fd)
+	{
+		serverCon = new ServerConnection(*this, fd, addr, addrlen, setting_.use_proxymode, ssl_ctx_);
+	}
+	else
+	{
+		serverCon = new ServerConnection(*this, fd, addr, addrlen, setting_.use_proxymode, nullptr);
+	}
+	
 	connections_.push_back(std::unique_ptr<ServerConnection>(serverCon));
 
 

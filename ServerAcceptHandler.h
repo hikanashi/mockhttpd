@@ -33,7 +33,11 @@ public:
 
 
 	void start_listen();
-	void accept(evutil_socket_t fd, struct sockaddr *addr, int64_t addrlen);
+	void accept(
+		struct evconnlistener *listener,
+		evutil_socket_t fd, 
+		struct sockaddr *addr,
+		int64_t addrlen);
 
 	EventHandler& getEv() { return event_; }
 	void removeSocket(
@@ -53,19 +57,26 @@ protected:
 		const char *certificate_chain,
 		const char *private_key);
 
+	struct evconnlistener* bind_port(
+		const char*	node,
+		const char* service);
+
+
 private:
 	bool	dothread_;
 	pthread_t thread_;
 	EventHandler  event_;
 	SettingConnection setting_;
 	SSL_CTX*	ssl_ctx_;
+	evutil_socket_t     ssl_socket_;
 
 	std::vector<std::unique_ptr<ServerConnection> > connections_;
 
 	std::vector< ResponseRulePtr > response_rule_;
 	pthread_mutex_t  response_mutex;
 	struct event*	timerev_;
-	struct evconnlistener* listener_;
+	std::vector<struct evconnlistener*> listeners_;
+//	struct evconnlistener* listener_;
 	
 
 };
