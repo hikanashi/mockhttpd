@@ -174,6 +174,24 @@ int ServerConnection::readcb(struct bufferevent *bev)
 		return 0;
 	}
 
+	if (ssl_ != nullptr &&
+		accept_.getSetting().enable_clientverify != false)
+	{
+
+		X509* clientcert = SSL_get_peer_certificate(ssl_);
+		if (clientcert == NULL)
+		{
+			warnx("client certificate no receive");
+			return -1;
+		}
+
+		long client_verify = SSL_get_verify_result(ssl_);
+		if (client_verify != X509_V_OK)
+		{
+			warnx("client verify error %d see DIAGNOSTICS from https://www.openssl.org/docs/man1.1.1/man1/verify.html ", client_verify);
+			return -1;
+		}
+	}
 	ssize_t readlen = 0;
 	struct evbuffer* input = bufferevent_get_input(bev_);
 	size_t datalen = evbuffer_get_length(input);

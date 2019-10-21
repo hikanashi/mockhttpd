@@ -32,6 +32,8 @@ public:
 	static void termSocket();
 
 
+	const SettingConnection& getSetting() const{ return setting_;}
+
 	void start_listen();
 	void accept(
 		struct evconnlistener *listener,
@@ -50,6 +52,10 @@ public:
 				HttpRequest&     req);
 
 protected:
+	struct evconnlistener* bind_port(
+		const char*	node,
+		const char* service);
+
 	SSL_CTX * setup_default_tls();
 
 	int32_t server_setup_certs(
@@ -57,10 +63,10 @@ protected:
 		const char *certificate_chain,
 		const char *private_key);
 
-	struct evconnlistener* bind_port(
-		const char*	node,
-		const char* service);
-
+	int32_t setup_client_certs(
+		SSL_CTX *ctx,
+		std::string& cert,
+		intptr_t depth);
 
 private:
 	bool	dothread_;

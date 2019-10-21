@@ -16,6 +16,11 @@ typedef struct _SettingConnection
 	SSL_CTX*	ssl_ctx;
 	std::string certificate_chain;
 	std::string private_key;
+
+	bool		enable_clientverify;
+	intptr_t	verify_depth;
+	std::string	client_certificate;
+
 	struct timeval exit_time; // sec, usec
 
 	_SettingConnection()
@@ -25,8 +30,11 @@ typedef struct _SettingConnection
 		, enable_tls(true)
 		, use_proxymode(false)
 		, ssl_ctx(nullptr)
-		, certificate_chain("/opt/local/SSL/localhost_crt.pem")
-		, private_key("/opt/local/SSL/localhost_privatekey.pem")
+		, certificate_chain("/opt/local/SSL/svr1CA.pem")
+		, private_key("/opt/local/SSL/svr1key.pem")
+		, enable_clientverify(false)
+		, verify_depth(3)
+		, client_certificate("/opt/local/SSL/rootCA.pem")
 		, exit_time()
 	{}
 	_SettingConnection(const char* httpport, const char* httpsport, const char* node)
@@ -36,8 +44,11 @@ typedef struct _SettingConnection
 		, enable_tls(true)
 		, use_proxymode(false)
 		, ssl_ctx(nullptr)
-		, certificate_chain()
-		, private_key()
+		, certificate_chain("/opt/local/SSL/svr1CA.pem")
+		, private_key("/opt/local/SSL/svr1key.pem")
+		, enable_clientverify(false)
+		, verify_depth(3)
+		, client_certificate("/opt/local/SSL/rootCA.pem")
 		, exit_time()
 	{}
 } SettingConnection;

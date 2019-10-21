@@ -1,13 +1,12 @@
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN 
+#endif
+
 #include "ServerAcceptHandler.h"
 #include "EventHandler.h"
 #include "ServerConnection.h"
-
-void ServerAcceptHandler::termSocket()
-{
-#ifdef _WIN32
-	WSACleanup();
-#endif
-}
+//#include <openssl/x509.h>
+//#include <openssl/ssl.h>
 
 static void* startServer(void *p)
 {
@@ -17,25 +16,6 @@ static void* startServer(void *p)
 
 	return NULL;
 }
-
-void ServerAcceptHandler::start()
-{
-	int ret = pthread_create(&thread_, NULL, startServer, (void *)this);
-	if (ret != 0)
-	{
-		errx(1, "can not create thread : %s", strerror(ret));
-	}
-	else
-	{
-		dothread_ = true;
-	}
-}
-
-void ServerAcceptHandler::stop()
-{
-	event_.stop();
-}
-
 
 static void acceptcb(
 		struct evconnlistener *listener, evutil_socket_t fd,
@@ -54,6 +34,62 @@ static void timercb(
 	acceptHandler->stop();
 }
 
+static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
+{
+
+#if (1)
+	char*				subject;
+	char*				issuer;
+	int					err;
+	int					depth;
+	X509*				cert;
+	X509_NAME*			xsname;
+	X509_NAME*			xiname;
+
+	cert = X509_STORE_CTX_get_current_cert(x509_store);
+	err = X509_STORE_CTX_get_error(x509_store);
+	depth = X509_STORE_CTX_get_error_depth(x509_store);
+
+	xsname = X509_get_subject_name(cert);
+	subject = xsname ? X509_NAME_oneline(xsname, NULL, 0) : "(none)";
+
+	xiname = X509_get_issuer_name(cert);
+	issuer = xiname ? X509_NAME_oneline(xiname, NULL, 0) : "(none)";
+
+	warnx("verify:%d, error:%d, depth:%d, "
+			"subject:\"%s\", issuer:\"%s\"",
+			ok, err, depth, subject, issuer);
+	if (ok != 1)
+	{
+		warnx("(%s)", X509_verify_cert_error_string(err));
+	}
+
+	if (xsname)
+	{
+		OPENSSL_free(subject);
+	}
+
+	if (xiname)
+	{
+		OPENSSL_free(issuer);
+	}
+#endif
+
+	return 1;
+}
+
+static void die_most_horribly_from_openssl_error(const char *func)
+{
+	warnx("%s failed:\n", func);
+
+	/* This is the OpenSSL function that prints the contents of the
+	 * error stack to the specified file handle. */
+	ERR_print_errors_fp(stderr);
+
+	//	exit(EXIT_FAILURE);
+}
+
+
 ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	: dothread_(false)
 	, thread_()
@@ -67,6 +103,12 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, timerev_(nullptr)
 	, listeners_()
 {
+	//curl_global_init(CURL_GLOBAL_ALL);
+	OPENSSL_no_config();
+	//SSL_load_error_strings();
+	//ERR_load_BIO_strings();
+	//OpenSSL_add_all_algorithms();
+
 	timerev_ = evtimer_new(
 					event_.getEventBase(), timercb, this );
 
@@ -114,20 +156,38 @@ ServerAcceptHandler::~ServerAcceptHandler()
 	}
 }
 
-static void die_most_horribly_from_openssl_error(const char *func)
+void ServerAcceptHandler::start()
 {
-	warnx("%s failed:\n", func);
+	int ret = pthread_create(&thread_, NULL, startServer, (void *)this);
+	if (ret != 0)
+	{
+		errx(1, "can not create thread : %s", strerror(ret));
+	}
+	else
+	{
+		dothread_ = true;
+	}
+}
 
-	/* This is the OpenSSL function that prints the contents of the
-	 * error stack to the specified file handle. */
-	ERR_print_errors_fp(stderr);
+void ServerAcceptHandler::stop()
+{
+	event_.stop();
+}
 
-//	exit(EXIT_FAILURE);
+void ServerAcceptHandler::termSocket()
+{
+#ifdef _WIN32
+	WSACleanup();
+#endif
 }
 
 SSL_CTX * ServerAcceptHandler::setup_default_tls()
 {
 	SSL_CTX* ctx = SSL_CTX_new(TLSv1_2_server_method());
+	if (ctx == NULL)
+	{
+		return ctx;
+	}
 
 	//SSL_CTX_set_options(ctx,
 	//	SSL_OP_SINGLE_DH_USE |
@@ -159,6 +219,15 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 		ctx, 
 		setting_.certificate_chain.c_str(),
 		setting_.private_key.c_str() );
+
+	if (setting_.enable_clientverify != false)
+	{
+		setup_client_certs(
+			ctx,
+			setting_.client_certificate,
+			setting_.verify_depth);
+	}
+
 
 	return ctx;
 }
@@ -195,7 +264,53 @@ int32_t ServerAcceptHandler::server_setup_certs(
 
 }
 
+int32_t ServerAcceptHandler::setup_client_certs(
+	SSL_CTX *ctx,
+	std::string& cert,
+	intptr_t depth)
+{
+	SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, ssl_verify_callback);
+	SSL_CTX_set_verify_depth(ctx, depth);
 
+	if (cert.size() <= 0)
+	{
+		return 0;
+	}
+
+
+	warnx("Loading client certificate from '%s' depth:%d",
+		cert.c_str(), depth);
+
+	if (SSL_CTX_load_verify_locations(ctx, cert.c_str(), NULL) == 0)
+	{
+		die_most_horribly_from_openssl_error("SSL_CTX_load_verify_locations");
+		return -1;
+	}
+
+	/*
+	 * SSL_CTX_load_verify_locations() may leave errors in the error queue
+	 * while returning success
+	 */
+	ERR_clear_error();
+	STACK_OF(X509_NAME)  *list = SSL_load_client_CA_file(cert.c_str());
+
+	if (list == NULL) 
+	{
+		die_most_horribly_from_openssl_error("SSL_load_client_CA_file");
+		return -1;
+	}
+
+	/*
+	 * before 0.9.7h and 0.9.8 SSL_load_client_CA_file()
+	 * always leaved an error in the error queue
+	 */
+
+	ERR_clear_error();
+	SSL_CTX_set_client_CA_list(ctx, list);
+
+	return 0;
+
+}
 
 void ServerAcceptHandler::start_listen()
 {
@@ -301,7 +416,6 @@ struct evconnlistener* ServerAcceptHandler::bind_port(
 void ServerAcceptHandler::accept(struct evconnlistener *listener, evutil_socket_t fd, struct sockaddr *addr, int64_t addrlen)
 {
 	warnx("accept %d",fd);
-
 
 	if (evtimer_pending(timerev_,NULL) != 0)
 	{
