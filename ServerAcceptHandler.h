@@ -41,6 +41,9 @@ public:
 		struct sockaddr *addr,
 		int64_t addrlen);
 
+	int certificate_status(
+					SSL* ssl);
+
 	EventHandler& getEv() { return event_; }
 	void removeSocket(
 					ServerConnection* server);
@@ -58,7 +61,7 @@ protected:
 
 	SSL_CTX * setup_default_tls();
 
-	int32_t server_setup_certs(
+	int32_t setup_server_certs(
 		SSL_CTX *ctx,
 		const char *certificate_chain,
 		const char *private_key);
@@ -67,6 +70,13 @@ protected:
 		SSL_CTX *ctx,
 		std::string& cert,
 		intptr_t depth);
+
+	int32_t setup_ocsp_stapling(
+		SSL_CTX *ctx,
+		std::string& res_file);
+
+	int32_t setup_ocsp_stapling_file(
+		std::string& res_file);
 
 private:
 	bool	dothread_;
@@ -82,8 +92,8 @@ private:
 	pthread_mutex_t  response_mutex;
 	struct event*	timerev_;
 	std::vector<struct evconnlistener*> listeners_;
-//	struct evconnlistener* listener_;
-	
+
+	std::vector<char>	ocsp_response_;
 
 };
 

@@ -47,6 +47,9 @@
     <TargetName Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(ProjectName)</TargetName>
     <TargetExt Condition="'$(Configuration)|$(Platform)'=='Release|x64'">.lib</TargetExt>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <PostBuildEventUseInBuild>false</PostBuildEventUseInBuild>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir);C:\opt\local\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -82,7 +85,7 @@
       <AdditionalDependencies>ws2_32.lib;event_core.lib;event_openssl.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <PostBuildEvent>
-      <Command>copy "$(ProjectDir)cert\*.pem" "$(OutDir)"  </Command>
+      <Command>copy "$(ProjectDir)cert\*.pem" "C:\opt\local\SSL"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">

@@ -7,6 +7,7 @@
 #include "ServerConnection.h"
 //#include <openssl/x509.h>
 //#include <openssl/ssl.h>
+#include <openssl/ocsp.h>
 
 static void* startServer(void *p)
 {
@@ -78,6 +79,17 @@ static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
 	return 1;
 }
 
+static int
+ssl_certificate_status_callback(SSL* ssl, void* data)
+{
+	ServerAcceptHandler* acceptHandler = static_cast<ServerAcceptHandler *>(data);
+	
+	int rc = acceptHandler->certificate_status(ssl);
+	return rc;
+}
+
+
+
 static void die_most_horribly_from_openssl_error(const char *func)
 {
 	warnx("%s failed:\n", func);
@@ -104,7 +116,7 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, listeners_()
 {
 	//curl_global_init(CURL_GLOBAL_ALL);
-	OPENSSL_no_config();
+	//OPENSSL_no_config();
 	//SSL_load_error_strings();
 	//ERR_load_BIO_strings();
 	//OpenSSL_add_all_algorithms();
@@ -189,50 +201,75 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 		return ctx;
 	}
 
-	//SSL_CTX_set_options(ctx,
-	//	SSL_OP_SINGLE_DH_USE |
-	//	SSL_OP_SINGLE_ECDH_USE |
-	//	SSL_OP_NO_SSLv2);
+	SSL_CTX_set_options(ctx,
+		SSL_OP_SINGLE_DH_USE |
+		SSL_OP_SINGLE_ECDH_USE |
+		SSL_OP_NO_SSLv2);
 
 	/* Cheesily pick an elliptic curve to use with elliptic curve ciphersuites.
 	 * We just hardcode a single curve which is reasonably decent.
 	 * See http://www.mail-archive.com/openssl-dev@openssl.org/msg30957.html */
-	//EC_KEY *ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
-	//if (!ecdh)
-	//{ 
-	//	die_most_horribly_from_openssl_error("EC_KEY_new_by_curve_name");
-	//	SSL_CTX_free(ctx);
-	//	return nullptr;
-	//}
+	EC_KEY *ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
+	if (!ecdh)
+	{ 
+		die_most_horribly_from_openssl_error("EC_KEY_new_by_curve_name");
+		SSL_CTX_free(ctx);
+		return nullptr;
+	}
 
-	//if (1 != SSL_CTX_set_tmp_ecdh(ctx, ecdh))
-	//{ 
-	//	die_most_horribly_from_openssl_error("SSL_CTX_set_tmp_ecdh");
-	//	SSL_CTX_free(ctx);
-	//	return nullptr;
-	//}
+	if (1 != SSL_CTX_set_tmp_ecdh(ctx, ecdh))
+	{ 
+		die_most_horribly_from_openssl_error("SSL_CTX_set_tmp_ecdh");
+		SSL_CTX_free(ctx);
+		return nullptr;
+	}
 
+	int32_t ret = 0;
 
-//	const char *certificate_chain = "server_crt.pem";
-//	const char *private_key = "server_privatekey.pem";
-	server_setup_certs (
-		ctx, 
-		setting_.certificate_chain.c_str(),
-		setting_.private_key.c_str() );
+	ret = setup_server_certs(
+				ctx, 
+				setting_.certificate_chain.c_str(),
+				setting_.private_key.c_str() );
+	if (ret != 0)
+	{
+		SSL_CTX_free(ctx);
+		return nullptr;
+	}
 
 	if (setting_.enable_clientverify != false)
 	{
-		setup_client_certs(
-			ctx,
-			setting_.client_certificate,
-			setting_.verify_depth);
+		ret = setup_client_certs(
+					ctx,
+					setting_.client_certificate,
+					setting_.verify_depth);
+
+		if (ret != 0)
+		{
+			SSL_CTX_free(ctx);
+			return nullptr;
+		}
+
+	}
+
+
+	if (setting_.enable_ocsp_stapling != false)
+	{
+		ret = setup_ocsp_stapling(
+					ctx,
+					setting_.stapling_file);
+		if (ret != 0)
+		{
+			SSL_CTX_free(ctx);
+			return nullptr;
+		}
+
 	}
 
 
 	return ctx;
 }
 
-int32_t ServerAcceptHandler::server_setup_certs(
+int32_t ServerAcceptHandler::setup_server_certs(
 				SSL_CTX *ctx,
 				const char *certificate_chain,
 				const char *private_key)
@@ -311,6 +348,120 @@ int32_t ServerAcceptHandler::setup_client_certs(
 	return 0;
 
 }
+
+int32_t ServerAcceptHandler::setup_ocsp_stapling(
+	SSL_CTX *ctx,
+	std::string& res_file)
+{
+	if (setup_ocsp_stapling_file(res_file) != 0)
+	{
+		return -1;
+	}
+
+	warnx("Loading ocsp response from '%s'",
+				res_file.c_str());
+
+	SSL_CTX_set_tlsext_status_arg(ctx, this);
+	SSL_CTX_set_tlsext_status_cb(ctx, ssl_certificate_status_callback);
+
+
+	return 0;
+}
+
+
+int32_t ServerAcceptHandler::setup_ocsp_stapling_file(
+	std::string& res_file)
+{
+
+	BIO* bio = BIO_new_file(res_file.c_str(), "rb");
+	if (bio == NULL) 
+	{
+		warnx("ocsp response BIO_new_file(\"%s\") failed", 
+			res_file.c_str());
+		return -1;
+	}
+
+	OCSP_RESPONSE* response = d2i_OCSP_RESPONSE_bio(bio, NULL);
+	if (response == NULL)
+	{
+		warnx("d2i_OCSP_RESPONSE_bio(\"%s\") failed",
+			res_file.c_str());
+		BIO_free(bio);
+		return -1;
+	}
+
+	int len = i2d_OCSP_RESPONSE(response, NULL);
+	if (len <= 0)
+	{
+		warnx("i2d_OCSP_RESPONSE(\"%s\") failed", 
+			res_file.c_str());
+		goto failed;
+	}
+
+	ocsp_response_.reserve(len);
+	unsigned char* buf = (unsigned char*)ocsp_response_.data();
+
+	len = i2d_OCSP_RESPONSE(response, &buf);
+	if (len <= 0) 
+	{
+		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
+			res_file.c_str());
+		ocsp_response_.clear();
+		goto failed;
+	}
+	ocsp_response_.resize(len);
+
+	OCSP_RESPONSE_free(response);
+	BIO_free(bio);
+
+	return 0;
+
+failed:
+	OCSP_RESPONSE_free(response);
+	BIO_free(bio);
+
+	return -1;
+}
+
+int ServerAcceptHandler::certificate_status(
+	SSL *ssl)
+{
+//	warnx("SSL certificate status callback");
+
+	int rc = SSL_TLSEXT_ERR_NOACK;
+
+	X509* cert = SSL_get_certificate(ssl);
+
+	if (cert == NULL)
+	{
+		return rc;
+	}
+
+	if (ocsp_response_.size() > 0)
+	{
+		/* we have to copy ocsp response as OpenSSL will free it by itself */
+
+		char* ocsp_resp = (char*)OPENSSL_malloc(ocsp_response_.size());
+		if (ocsp_resp == NULL)
+		{
+			errx(1, "OPENSSL_malloc() failed. so can't send ocsp response");
+			return SSL_TLSEXT_ERR_NOACK;
+		}
+
+		memcpy(ocsp_resp, ocsp_response_.data(), ocsp_response_.size());
+
+		SSL_set_tlsext_status_ocsp_resp(ssl, ocsp_resp, ocsp_response_.size());
+
+		rc = SSL_TLSEXT_ERR_OK;
+	}
+
+	//ngx_ssl_stapling_update(staple);
+
+}
+
+
+void certificate_statu(
+	SSL* ssl);
 
 void ServerAcceptHandler::start_listen()
 {
