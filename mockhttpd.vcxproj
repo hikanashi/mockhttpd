@@ -82,7 +82,7 @@
     <Lib>
       <AdditionalOptions>%(AdditionalOptions) /machine:x64</AdditionalOptions>
       <AdditionalLibraryDirectories>C:\opt\local\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>ws2_32.lib;event_core.lib;event_openssl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>ws2_32.lib;event.lib;event_openssl.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <PostBuildEvent>
       <Command>copy "$(ProjectDir)cert\*.pem" "C:\opt\local\SSL"</Command>
@@ -138,6 +138,7 @@
     <ClCompile Include="GzipDeflater.cpp" />
     <ClCompile Include="GzipInflater.cpp" />
     <ClCompile Include="http-parser\http_parser.c" />
+    <ClCompile Include="OcspClient.cpp" />
     <ClCompile Include="ResponseRuleGeneral.cpp" />
     <ClCompile Include="ServerAcceptHandler.cpp" />
     <ClCompile Include="ServerConnection.cpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="http-parser\http_parser.h" />
     <ClInclude Include="HttpHeader.h" />
     <ClInclude Include="MemBuff.h" />
+    <ClInclude Include="OcspClient.h" />
     <ClInclude Include="ResponseRule.h" />
     <ClInclude Include="ResponseRuleGeneral.h" />
     <ClInclude Include="ServerAcceptHandler.h" />

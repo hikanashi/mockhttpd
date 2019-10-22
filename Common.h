@@ -20,11 +20,13 @@
 
 #define warnx(...)	\
 	do {						\
+		printf("--mockhttpd- ");	\
 		printf(__VA_ARGS__);	\
 		printf("\n");			\
 	} while (0);
 #define errx(flg,...)			\
 	do {						\
+		printf("--mockhttpd- ");	\
 		printf(__VA_ARGS__);	\
 		printf("\n");			\
 	} while (0);
@@ -44,6 +46,7 @@
 #define strcasecmp _stricmp
 #define getcwd _getcwd
 #define putenv _putenv
+#define stat _stat
 typedef int64_t ssize_t;
 #endif
 

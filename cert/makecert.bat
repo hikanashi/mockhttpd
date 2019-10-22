@@ -12,7 +12,7 @@ rem openssl.cnfê›íË
 set SERIALNO=01
 set CRLNO=00
 set CRLURI=http://localhost/revoke.crl
-set OCSPURI=http://ocsp.localhost
+set OCSPURI=http://localhost:8888/
 set DNSNAME=localhost
 
 rem RootCAê›íË

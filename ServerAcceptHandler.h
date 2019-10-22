@@ -6,6 +6,7 @@
 #include <vector>
 #include <stdio.h>
 #include <sys/types.h>
+#include <memory>
 
 #ifndef HAVE_STRUCT_TIMESPEC
 #define HAVE_STRUCT_TIMESPEC
@@ -20,6 +21,7 @@
 
 
 class ServerConnection;
+class OcspClient;
 
 class ServerAcceptHandler
 {
@@ -41,9 +43,6 @@ public:
 		struct sockaddr *addr,
 		int64_t addrlen);
 
-	int certificate_status(
-					SSL* ssl);
-
 	EventHandler& getEv() { return event_; }
 	void removeSocket(
 					ServerConnection* server);
@@ -64,7 +63,12 @@ protected:
 	int32_t setup_server_certs(
 		SSL_CTX *ctx,
 		const char *certificate_chain,
-		const char *private_key);
+		const char *private_key,
+		X509**		cert);
+
+	X509* load_certchain(
+		const char*	cert_path,
+		SSL_CTX *ctx);
 
 	int32_t setup_client_certs(
 		SSL_CTX *ctx,
@@ -72,11 +76,9 @@ protected:
 		intptr_t depth);
 
 	int32_t setup_ocsp_stapling(
-		SSL_CTX *ctx,
-		std::string& res_file);
+		SSL_CTX*	ctx,
+		X509*		cert);
 
-	int32_t setup_ocsp_stapling_file(
-		std::string& res_file);
 
 private:
 	bool	dothread_;
@@ -93,7 +95,8 @@ private:
 	struct event*	timerev_;
 	std::vector<struct evconnlistener*> listeners_;
 
-	std::vector<char>	ocsp_response_;
+	X509*						cert_;
+	std::shared_ptr<OcspClient>	ocsp_;
 
 };
 

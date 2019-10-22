@@ -23,6 +23,7 @@ typedef struct _SettingConnection
 
 	bool enable_ocsp_stapling;
 	std::string stapling_file;
+	bool verify_stapling;
 
 	struct timeval exit_time; // sec, usec
 
@@ -35,27 +36,12 @@ typedef struct _SettingConnection
 		, ssl_ctx(nullptr)
 		, certificate_chain("/opt/local/SSL/svr1CA.pem")
 		, private_key("/opt/local/SSL/svr1key.pem")
-		, enable_clientverify(true)
-		, verify_depth(3)
-		, client_certificate("/opt/local/SSL/rootCA.pem")
-		, enable_ocsp_stapling(true)
-		, stapling_file("/opt/local/SSL/ocsp_resp.der")
-		, exit_time()
-	{}
-	_SettingConnection(const char* httpport, const char* httpsport, const char* node)
-		: port_http(std::string(httpport))
-		, port_https(std::string(httpsport))
-		, node(std::string(node))
-		, enable_tls(true)
-		, use_proxymode(false)
-		, ssl_ctx(nullptr)
-		, certificate_chain("/opt/local/SSL/svr1CA.pem")
-		, private_key("/opt/local/SSL/svr1key.pem")
 		, enable_clientverify(false)
 		, verify_depth(3)
 		, client_certificate("/opt/local/SSL/rootCA.pem")
 		, enable_ocsp_stapling(false)
-		, stapling_file("/opt/local/SSL/ocsp_resp.der")
+		, stapling_file("/opt/local/SSL/ocsp_response.der")
+		, verify_stapling(false)
 		, exit_time()
 	{}
 } SettingConnection;

@@ -5,9 +5,7 @@
 #include "ServerAcceptHandler.h"
 #include "EventHandler.h"
 #include "ServerConnection.h"
-//#include <openssl/x509.h>
-//#include <openssl/ssl.h>
-#include <openssl/ocsp.h>
+#include "OcspClient.h"
 
 static void* startServer(void *p)
 {
@@ -79,15 +77,6 @@ static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
 	return 1;
 }
 
-static int
-ssl_certificate_status_callback(SSL* ssl, void* data)
-{
-	ServerAcceptHandler* acceptHandler = static_cast<ServerAcceptHandler *>(data);
-	
-	int rc = acceptHandler->certificate_status(ssl);
-	return rc;
-}
-
 
 
 static void die_most_horribly_from_openssl_error(const char *func)
@@ -114,9 +103,15 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, response_mutex(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
 	, timerev_(nullptr)
 	, listeners_()
+	, cert_(NULL)
+	, ocsp_()
 {
 	//curl_global_init(CURL_GLOBAL_ALL);
-	//OPENSSL_no_config();
+
+#if OPENSSL_VERSION_NUMBER > 0x1010101fL && !defined(LIBRESSL_VERSION_NUMBER)
+	OPENSSL_no_config();
+#endif
+
 	//SSL_load_error_strings();
 	//ERR_load_BIO_strings();
 	//OpenSSL_add_all_algorithms();
@@ -149,6 +144,12 @@ ServerAcceptHandler::~ServerAcceptHandler()
 
 
 	stop();
+
+	if (cert_ != NULL)
+	{
+		X509_free(cert_);
+		cert_ = NULL;
+	}
 
 	if (ssl_ctx_ != setting_.ssl_ctx)
 	{
@@ -225,13 +226,19 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 	}
 
 	int32_t ret = 0;
+	X509*	cert = NULL;
 
 	ret = setup_server_certs(
 				ctx, 
 				setting_.certificate_chain.c_str(),
-				setting_.private_key.c_str() );
+				setting_.private_key.c_str(),
+				&cert);
 	if (ret != 0)
 	{
+		if (cert != NULL)
+		{
+			X509_free(cert);
+		}
 		SSL_CTX_free(ctx);
 		return nullptr;
 	}
@@ -245,6 +252,10 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 
 		if (ret != 0)
 		{
+			if (cert != NULL)
+			{
+				X509_free(cert);
+			}
 			SSL_CTX_free(ctx);
 			return nullptr;
 		}
@@ -256,13 +267,16 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 	{
 		ret = setup_ocsp_stapling(
 					ctx,
-					setting_.stapling_file);
+					cert);
 		if (ret != 0)
 		{
+			if (cert != NULL)
+			{
+				X509_free(cert);
+			}
 			SSL_CTX_free(ctx);
 			return nullptr;
 		}
-
 	}
 
 
@@ -272,20 +286,25 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 int32_t ServerAcceptHandler::setup_server_certs(
 				SSL_CTX *ctx,
 				const char *certificate_chain,
-				const char *private_key)
+				const char *private_key,
+				X509**		cert)
 {
 	warnx("Loading certificate chain from '%s'\n"
 		"and private key from '%s'\n",
 		certificate_chain, private_key);
 
-	if (1 != SSL_CTX_use_certificate_chain_file(ctx, certificate_chain))
+	ERR_clear_error();      /* clear error stack for
+							 * SSL_CTX_use_certificate() */
+	*cert = load_certchain(certificate_chain, ctx);
+	if (*cert == NULL)
 	{
-		die_most_horribly_from_openssl_error("SSL_CTX_use_certificate_chain_file");
 		return -1;
 	}
 
 	if (1 != SSL_CTX_use_PrivateKey_file(ctx, private_key, SSL_FILETYPE_PEM))
 	{
+		X509_free(*cert);
+		*cert = NULL;
 		die_most_horribly_from_openssl_error("SSL_CTX_use_PrivateKey_file");
 		return -1;
 	}
@@ -293,13 +312,101 @@ int32_t ServerAcceptHandler::setup_server_certs(
 
 	if (1 != SSL_CTX_check_private_key(ctx))
 	{
+		X509_free(*cert);
+		*cert = NULL;
 		die_most_horribly_from_openssl_error("SSL_CTX_check_private_key");
 		return -1;
 	}
 
 	return 0;
-
 }
+
+X509* ServerAcceptHandler::load_certchain(
+	const char*	cert_path,
+	SSL_CTX *ctx)
+{
+	ERR_clear_error();          /* clear error stack for
+								 * SSL_CTX_use_certificate() */
+
+	BIO* bio = BIO_new_file(cert_path, "r");
+	if (bio == NULL)
+	{
+		warnx("BIO_new_file(%s) failed", cert_path);
+		return NULL;
+	}
+
+	X509* x509 = PEM_read_bio_X509_AUX(bio, NULL, NULL, NULL);
+	if (x509 == NULL)
+	{
+		warnx("PEM_read_bio_X509_AUX(%s) failed", cert_path);
+		BIO_free(bio);
+		return NULL;
+	}
+
+	int ret = SSL_CTX_use_certificate(ctx, x509);
+	if (ERR_peek_error() != 0)
+	{
+		ret = 0;
+	}
+
+	if (ret == 0)
+	{
+		X509_free(x509);
+		BIO_free(bio);
+		return NULL;
+	}
+
+	int r = SSL_CTX_clear_chain_certs(ctx);
+	if (r == 0) 
+	{
+		X509_free(x509);
+		BIO_free(bio);
+		return NULL;
+	}
+
+	for (;;)
+	{
+		X509* ca = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+		if (ca == NULL)
+		{
+			u_long n = ERR_peek_last_error();
+
+			if (ERR_GET_LIB(n) == ERR_LIB_PEM
+				&& ERR_GET_REASON(n) == PEM_R_NO_START_LINE)
+			{
+				/* end of file */
+				ERR_clear_error();
+				break;
+			}
+
+			/* some real error */
+			warnx("PEM_read_bio_X509() failed");
+			X509_free(x509);
+			BIO_free(bio);
+			return NULL;
+		}
+
+		r = SSL_CTX_add0_chain_cert(ctx, ca);
+		/*
+		 * Note that we must not free ca if it was successfully added to
+		 * the chain (while we must free the main certificate, since its
+		 * reference count is increased by SSL_CTX_use_certificate).
+		 */
+		if (!r) 
+		{
+			warnx("SSL_CTX_add0_chain_cert() failed");
+			X509_free(ca);
+			X509_free(x509);
+			BIO_free(bio);
+			return NULL;
+		}
+	}
+
+	BIO_free(bio);
+
+	return x509;
+}
+
 
 int32_t ServerAcceptHandler::setup_client_certs(
 	SSL_CTX *ctx,
@@ -350,118 +457,23 @@ int32_t ServerAcceptHandler::setup_client_certs(
 }
 
 int32_t ServerAcceptHandler::setup_ocsp_stapling(
-	SSL_CTX *ctx,
-	std::string& res_file)
-{
-	if (setup_ocsp_stapling_file(res_file) != 0)
-	{
-		return -1;
-	}
-
-	warnx("Loading ocsp response from '%s'",
-				res_file.c_str());
-
-	SSL_CTX_set_tlsext_status_arg(ctx, this);
-	SSL_CTX_set_tlsext_status_cb(ctx, ssl_certificate_status_callback);
-
-
-	return 0;
-}
-
-
-int32_t ServerAcceptHandler::setup_ocsp_stapling_file(
-	std::string& res_file)
+	SSL_CTX*	ctx,
+	X509*		cert)
 {
 
-	BIO* bio = BIO_new_file(res_file.c_str(), "rb");
-	if (bio == NULL) 
+
+	std::shared_ptr<OcspClient> ocsp(new OcspClient(event_, ctx, cert));
+
+	int32_t ret = ocsp->init(setting_.stapling_file, setting_.verify_stapling);
+	if (ret < 0 )
 	{
-		warnx("ocsp response BIO_new_file(\"%s\") failed", 
-			res_file.c_str());
-		return -1;
+		return ret;
 	}
 
-	OCSP_RESPONSE* response = d2i_OCSP_RESPONSE_bio(bio, NULL);
-	if (response == NULL)
-	{
-		warnx("d2i_OCSP_RESPONSE_bio(\"%s\") failed",
-			res_file.c_str());
-		BIO_free(bio);
-		return -1;
-	}
-
-	int len = i2d_OCSP_RESPONSE(response, NULL);
-	if (len <= 0)
-	{
-		warnx("i2d_OCSP_RESPONSE(\"%s\") failed", 
-			res_file.c_str());
-		goto failed;
-	}
-
-	ocsp_response_.reserve(len);
-	unsigned char* buf = (unsigned char*)ocsp_response_.data();
-
-	len = i2d_OCSP_RESPONSE(response, &buf);
-	if (len <= 0) 
-	{
-		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
-			res_file.c_str());
-		ocsp_response_.clear();
-		goto failed;
-	}
-	ocsp_response_.resize(len);
-
-	OCSP_RESPONSE_free(response);
-	BIO_free(bio);
-
-	return 0;
-
-failed:
-	OCSP_RESPONSE_free(response);
-	BIO_free(bio);
-
-	return -1;
+	ocsp_ = ocsp;
+	return ret;
 }
 
-int ServerAcceptHandler::certificate_status(
-	SSL *ssl)
-{
-//	warnx("SSL certificate status callback");
-
-	int rc = SSL_TLSEXT_ERR_NOACK;
-
-	X509* cert = SSL_get_certificate(ssl);
-
-	if (cert == NULL)
-	{
-		return rc;
-	}
-
-	if (ocsp_response_.size() > 0)
-	{
-		/* we have to copy ocsp response as OpenSSL will free it by itself */
-
-		char* ocsp_resp = (char*)OPENSSL_malloc(ocsp_response_.size());
-		if (ocsp_resp == NULL)
-		{
-			errx(1, "OPENSSL_malloc() failed. so can't send ocsp response");
-			return SSL_TLSEXT_ERR_NOACK;
-		}
-
-		memcpy(ocsp_resp, ocsp_response_.data(), ocsp_response_.size());
-
-		SSL_set_tlsext_status_ocsp_resp(ssl, ocsp_resp, ocsp_response_.size());
-
-		rc = SSL_TLSEXT_ERR_OK;
-	}
-
-	//ngx_ssl_stapling_update(staple);
-
-}
-
-
-void certificate_statu(
-	SSL* ssl);
 
 void ServerAcceptHandler::start_listen()
 {

@@ -6,7 +6,7 @@ set CERTDIR="cert"
 rem OpenSSLディレクトリ
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
-set OCSPHOST=localhost
+set OCSPURL=http://localhost
 set OCSPPORT=8888
 set OCSPRESPONSE=ocsp_resp.der
 
@@ -17,6 +17,7 @@ set INMDCACRT=icacrt.pem
 set INMDCAJOIN=rootCA.pem
 
 rem サーバ証明書設定
+set SVR1CRT=svr1crt.pem
 set SVR1JOIN=svr1CA.pem
 
 
@@ -26,7 +27,7 @@ if not exist %CERTDIR% (
 
 cd %CERTDIR%
 
-%OPENSSLCMD% ocsp -no_nonce -issuer %INMDCACRT% -cert %SVR1JOIN% -CAfile %INMDCAJOIN% -host %OCSPHOST% -port %OCSPPORT% -respout %OCSPRESPONSE%
+%OPENSSLCMD% ocsp -no_nonce -issuer %INMDCACRT% -cert %SVR1CRT% -CAfile %INMDCAJOIN% -url %OCSPURL% -port %OCSPPORT% -respout %OCSPRESPONSE%
 
 :SUCCESS
 echo "Successfully."
