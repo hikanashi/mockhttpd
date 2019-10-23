@@ -1,6 +1,10 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN 
+#endif
+
 #include <stdint.h>
 #include <memory>
 #include <utility>
@@ -68,8 +72,6 @@ typedef int64_t ssize_t;
 		Sleep((DWORD)ms);				\
 	} while (0);
 #endif
-
-
 
 typedef enum ConnectionProtocol
 {

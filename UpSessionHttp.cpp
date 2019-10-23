@@ -3,10 +3,9 @@
 #include <sstream>
 
 #include "UpSessionHttp.h"
-#include "ServerAcceptHandler.h"
 #include "ResponseRule.h"
 #include "GzipInflater.h"
-
+#include "ServerAcceptHandler.h"
 
 UpSessionHttp::UpSessionHttp(ServerConnection& handler)
 	: UpSession(handler) , SessionHttp1Handler(HTTP_REQUEST)

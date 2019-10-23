@@ -1,12 +1,10 @@
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN 
-#endif
-
 #include "OcspClient.h"
 #include <evhttp.h>
 #include <openssl/ocsp.h>
 #include <curl/curl.h>
 #include "http-parser/http_parser.h"
+
+#include "OpenSSLTypes.h"
 
 #define base64_encoded_length(len)  (((len + 2) / 3) * 4)
 #define OCSP_ESCAPE_URI            0
@@ -19,6 +17,8 @@
 
 
 static u_char   basis64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+using namespace openssl;
 
 static void request_finished(struct evhttp_request *req, void *arg)
 {
@@ -37,53 +37,6 @@ ssl_certificate_status_callback(SSL* ssl, void* data)
 	int rc = ocspcli->certificate_status(ssl);
 	return rc;
 }
-
-
-
-static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
-{
-
-#if (1)
-	char*				subject;
-	char*				issuer;
-	int					err;
-	int					depth;
-	X509*				cert;
-	X509_NAME*			xsname;
-	X509_NAME*			xiname;
-
-	cert = X509_STORE_CTX_get_current_cert(x509_store);
-	err = X509_STORE_CTX_get_error(x509_store);
-	depth = X509_STORE_CTX_get_error_depth(x509_store);
-
-	xsname = X509_get_subject_name(cert);
-	subject = xsname ? X509_NAME_oneline(xsname, NULL, 0) : "(none)";
-
-	xiname = X509_get_issuer_name(cert);
-	issuer = xiname ? X509_NAME_oneline(xiname, NULL, 0) : "(none)";
-
-	warnx("verify:%d, error:%d, depth:%d, "
-		"subject:\"%s\", issuer:\"%s\"",
-		ok, err, depth, subject, issuer);
-	if (ok != 1)
-	{
-		warnx("(%s)", X509_verify_cert_error_string(err));
-	}
-
-	if (xsname)
-	{
-		OPENSSL_free(subject);
-	}
-
-	if (xiname)
-	{
-		OPENSSL_free(issuer);
-	}
-#endif
-
-	return 1;
-}
-
 
 OcspClient::OcspClient(
 		EventHandler&	ev,
@@ -107,12 +60,6 @@ OcspClient::OcspClient(
 OcspClient::~OcspClient()
 {
 	clear_request();
-
-	if (cert_ != NULL)
-	{
-		X509_free(cert_);
-		cert_ = NULL;
-	}
 }
 
 void OcspClient::clear_request()
@@ -193,85 +140,44 @@ int32_t OcspClient::setup_stapling(
 int32_t OcspClient::stapling_file(
 	std::string& res_file)
 {
-#if 0
-	struct stat buf;
-	int result = stat(res_file.c_str(), &buf);
-	if (result != 0)
-	{
-		warnx("(\"%s\") can't access",
-			res_file.c_str());
-		return 1;
-	}
-
-	ocsp_response_.resize(buf.st_size);
-	
-	BIO* bio = BIO_new_file(res_file.c_str(), "rb");
-	if (bio == NULL)
+	UniquePtr<BIO> bio(BIO_new_file(res_file.c_str(), "rb"));
+	if (bio.get() == NULL)
 	{
 		warnx("ocsp response BIO_new_file(\"%s\") not exist",
 			res_file.c_str());
 		return 1;
 	}
 
-	int readsize= BIO_read(bio, ocsp_response_.data(), ocsp_response_.size());
-	BIO_free(bio);
-
-	if (readsize != ocsp_response_.size())
-	{
-		return -1;
-	}
-
-	return 0;
-
-#else
-	BIO* bio = BIO_new_file(res_file.c_str(), "rb");
-	if (bio == NULL)
-	{
-		warnx("ocsp response BIO_new_file(\"%s\") not exist",
-			res_file.c_str());
-		return 1;
-	}
-
-	OCSP_RESPONSE* response = d2i_OCSP_RESPONSE_bio(bio, NULL);
-	if (response == NULL)
+	UniquePtr<OCSP_RESPONSE> response(
+		d2i_OCSP_RESPONSE_bio(bio.get(), NULL));
+	if (response.get() == NULL)
 	{
 		warnx("d2i_OCSP_RESPONSE_bio(\"%s\") failed",
 			res_file.c_str());
-		BIO_free(bio);
 		return -1;
 	}
 
-	int len = i2d_OCSP_RESPONSE(response, NULL);
+	int len = i2d_OCSP_RESPONSE(response.get(), NULL);
 	if (len <= 0)
 	{
 		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
 			res_file.c_str());
-		goto failed;
+		return -1;
 	}
 
 	ocsp_response_.resize(len);
 	unsigned char* buf = ocsp_response_.data();
 
-	len = i2d_OCSP_RESPONSE(response, &buf);
+	len = i2d_OCSP_RESPONSE(response.get(), &buf);
 	if (len <= 0)
 	{
 		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
 			res_file.c_str());
 		ocsp_response_.clear();
-		goto failed;
+		return -1;
 	}
 
-	OCSP_RESPONSE_free(response);
-	BIO_free(bio);
-
 	return 0;
-
-failed:
-	OCSP_RESPONSE_free(response);
-	BIO_free(bio);
-
-	return -1;
-#endif
 }
 
 int32_t OcspClient::stapling_certificate()
@@ -315,7 +221,6 @@ int32_t OcspClient::stapling_issuer(
 {
 	X509            *issuer = NULL;
 	X509_STORE      *store = NULL;
-	X509_STORE_CTX  *store_ctx = NULL;
 	STACK_OF(X509)  *chain = NULL;
 
 #ifdef SSL_CTRL_SELECT_CURRENT_CERT
@@ -360,37 +265,33 @@ int32_t OcspClient::stapling_issuer(
 		return -1;
 	}
 
-	store_ctx = X509_STORE_CTX_new();
+	UniquePtr<X509_STORE_CTX> store_ctx(X509_STORE_CTX_new());
 	if (store_ctx == NULL)
 	{
 		warnx("X509_STORE_CTX_new() failed");
 		return -1;
 	}
 
-	if (X509_STORE_CTX_init(store_ctx, store, NULL, NULL) == 0)
+	if (X509_STORE_CTX_init(store_ctx.get(), store, NULL, NULL) == 0)
 	{
 		warnx("X509_STORE_CTX_init() failed");
-		X509_STORE_CTX_free(store_ctx);
 		return -1;
 	}
 
-	int rc = X509_STORE_CTX_get1_issuer(&issuer, store_ctx, cert);
+	int rc = X509_STORE_CTX_get1_issuer(&issuer, store_ctx.get(), cert);
 
 	if (rc == -1) 
 	{
 		warnx("X509_STORE_CTX_get1_issuer() failed %s", commonName(cert).c_str());
-		X509_STORE_CTX_free(store_ctx);
 		return -1;
 	}
 
-	if (rc == 0) {
+	if (rc == 0) 
+	{
 		errx(1,"\"ssl_stapling\" ignored, "
 			"issuer certificate not found for certificate %s", commonName(cert).c_str());
-		X509_STORE_CTX_free(store_ctx);
 		return -1;
 	}
-
-	X509_STORE_CTX_free(store_ctx);
 
 	warnx("SSL get issuer: found %p in cert store(%s)", issuer, commonName(cert).c_str());
 
@@ -403,15 +304,10 @@ int32_t OcspClient::stapling_issuer(
 int32_t OcspClient::stapling_responder(
 		X509*	cert)
 {
-	char                      *s = NULL;
-	STACK_OF(OPENSSL_STRING)  *aia = NULL;
-
 	if (reponder_.length() == 0)
 	{
-
 		/* extract OCSP responder URL from certificate */
-
-		aia = X509_get1_ocsp(cert);
+		UniquePtr<STACK_OF(OPENSSL_STRING)> aia( X509_get1_ocsp(cert));
 		if (aia == NULL) 
 		{
 			warnx("\"ssl_stapling\" ignored, "
@@ -420,20 +316,18 @@ int32_t OcspClient::stapling_responder(
 		}
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
-		s = sk_OPENSSL_STRING_value(aia, 0);
+		char* s = sk_OPENSSL_STRING_value(aia.get(), 0);
 #else
-		s = sk_value(aia, 0);
+		char* s = sk_value(aia.get(), 0);
 #endif
 		if (s == NULL)
 		{
 			warnx("\"ssl_stapling\" ignored, "
 				"no OCSP responder URL in the certificate %s", commonName(cert).c_str());
-			X509_email_free(aia);
 			return 1;
 		}
 
 		reponder_.assign(s);
-		X509_email_free(aia);
 	}
 
 	struct http_parser_url u = { 0 };
@@ -519,42 +413,7 @@ int OcspClient::certificate_status(
 		return rc;
 	}
 
-	if (ocsp_response_.size() > 0)
-	{
-		/* we have to copy ocsp response as OpenSSL will free it by itself */
-		size_t buflen = ocsp_response_.size();
-		unsigned char* ocsp_resp = (unsigned char*)OPENSSL_malloc(buflen);
-		if (ocsp_resp == NULL)
-		{
-			errx(1, "OPENSSL_malloc() failed. so can't send ocsp response");
-			return SSL_TLSEXT_ERR_NOACK;
-		}
-
-		memcpy(ocsp_resp, ocsp_response_.data(), buflen);
-
-		SSL_set_tlsext_status_ocsp_resp(ssl, ocsp_resp, buflen);
-
-
-		const unsigned char* res = ocsp_resp;
-		OCSP_RESPONSE* ocsp = d2i_OCSP_RESPONSE(NULL, &res, buflen);
-		if (ocsp == NULL)
-		{
-			warnx("d2i_OCSP_RESPONSE() failed");
-		}
-		else
-		{
-			int resp_status = OCSP_response_status(ocsp);
-
-			if (resp_status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
-			{
-				warnx("OCSP response not successful (%d: %s)",
-					resp_status, OCSP_response_status_str(resp_status));
-			}
-		}
-
-
-		rc = SSL_TLSEXT_ERR_OK;
-	}
+	rc = send_ocsp_response(ssl,cert);
 
 	warnx("certificate_status %s", commonName(cert).c_str());
 
@@ -564,6 +423,63 @@ int OcspClient::certificate_status(
 
 }
 
+
+int  OcspClient::send_ocsp_response(
+	SSL*	ssl,
+	X509*	cert)
+{
+	int ret = SSL_TLSEXT_ERR_NOACK;
+
+	if (ocsp_response_.size() <= 0)
+	{
+		return ret;
+	}
+
+	/* we have to copy ocsp response as OpenSSL will free it by itself */
+	size_t buflen = ocsp_response_.size();
+	unsigned char* ocsp_resp = (unsigned char*)OPENSSL_malloc(buflen);
+	if (ocsp_resp == NULL)
+	{
+		errx(1, "OPENSSL_malloc() failed. so can't send ocsp response");
+		return SSL_TLSEXT_ERR_NOACK;
+	}
+
+	memcpy(ocsp_resp, ocsp_response_.data(), buflen);
+
+
+#if 0
+	const unsigned char* res = ocsp_resp;
+	OCSP_RESPONSE* ocsp = d2i_OCSP_RESPONSE(NULL, &res, buflen);
+	if (ocsp == NULL)
+	{
+		warnx("d2i_OCSP_RESPONSE() failed");
+	}
+	else
+	{
+		int resp_status = OCSP_response_status(ocsp);
+
+		if (resp_status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
+		{
+			warnx("OCSP response not successful (%d: %s)",
+				resp_status, OCSP_response_status_str(resp_status));
+		}
+	}
+#endif
+
+	long setresp = SSL_set_tlsext_status_ocsp_resp(ssl, ocsp_resp, buflen);
+	if(setresp == 1)
+	{
+		ret = SSL_TLSEXT_ERR_OK;
+	}
+	else
+	{
+		errx(1, "SSL_set_tlsext_status_ocsp_resp error(%d) so send ALERT_WARNING",
+			setresp);
+		ret = SSL_TLSEXT_ERR_ALERT_WARNING;
+	}
+
+	return ret;
+}
 
 
 void OcspClient::stapling_update(
@@ -592,7 +508,7 @@ void OcspClient::stapling_update(
 	cert_ = cert;
 
 
-	OCSP_REQUEST* ocsp = OCSP_REQUEST_new();
+	UniquePtr<OCSP_REQUEST> ocsp( OCSP_REQUEST_new());
 	if (ocsp == NULL) 
 	{
 		errx(1,"OCSP_REQUEST_new() failed");
@@ -603,30 +519,30 @@ void OcspClient::stapling_update(
 	if (id == NULL)
 	{
 		errx(1,"OCSP_cert_to_id() failed");
-		goto failed;
+		return;
 	}
 
-	if (OCSP_request_add0_id(ocsp, id) == NULL)
+	if (OCSP_request_add0_id(ocsp.get(), id) == NULL)
 	{
 		errx(1,"OCSP_request_add0_id() failed");
 		OCSP_CERTID_free(id);
-		goto failed;
+		return;
 	}
 
-	int len = i2d_OCSP_REQUEST(ocsp, NULL);
+	int len = i2d_OCSP_REQUEST(ocsp.get(), NULL);
 	if (len <= 0) 
 	{
 		errx(1,"i2d_OCSP_REQUEST() failed");
-		goto failed;
+		return;
 	}
 
 	binary.resize(len);
 	unsigned char*	data = binary.data();
-	len = i2d_OCSP_REQUEST(ocsp, &data);
+	len = i2d_OCSP_REQUEST(ocsp.get(), &data);
 	if (len <= 0)
 	{
 		errx(1,"i2d_OCSP_REQUEST() failed");
-		goto failed;
+		return;
 	}
 
 	size_t b64len = base64_encoded_length(binary.size());
@@ -664,8 +580,6 @@ void OcspClient::stapling_update(
 
 	launch_request(path);
 
-failed:
-	OCSP_REQUEST_free(ocsp);
 	return;
 }
 
@@ -742,49 +656,42 @@ void OcspClient::update_response(
 	const u_char*	buffer,
 	size_t buflen)
 {
-	int					resp_status = 0;
-	OCSP_BASICRESP*		basic = NULL;
-	X509_STORE*			store = NULL;
-	STACK_OF(X509)*		chain = NULL;
-	OCSP_CERTID*		id = NULL;
-	ASN1_GENERALIZEDTIME*	thisupdate = NULL;
-	ASN1_GENERALIZEDTIME*	nextupdate = NULL;
-	time_t				valid = 0;
-	OCSP_RESPONSE* ocsp = NULL;
-
-	ocsp = d2i_OCSP_RESPONSE(NULL, &buffer, buflen);
-	if (ocsp == NULL) {
+	UniquePtr<OCSP_RESPONSE> ocsp( d2i_OCSP_RESPONSE(NULL, &buffer, buflen));
+	if (ocsp == NULL) 
+	{
 		warnx("d2i_OCSP_RESPONSE() failed");
-		goto error;
+		return;
 	}
 
-	resp_status = OCSP_response_status(ocsp);
+	int resp_status = OCSP_response_status(ocsp.get());
 
 	if (resp_status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
 	{
 		warnx("OCSP response not successful (%d: %s)",
 			resp_status, OCSP_response_status_str(resp_status));
-		goto error;
+		return;
 	}
 
-	basic = OCSP_response_get1_basic(ocsp);
+	UniquePtr<OCSP_BASICRESP> basic( OCSP_response_get1_basic(ocsp.get()));
 	if (basic == NULL) 
 	{
 		warnx("OCSP_response_get1_basic() failed");
-		goto error;
+		return;
 	}
 
-	store = SSL_CTX_get_cert_store(ssl_ctx_);
+	X509_STORE* store = SSL_CTX_get_cert_store(ssl_ctx_);
 	if (store == NULL)
 	{
 		warnx("SSL_CTX_get_cert_store() failed");
-		goto error;
+		return;
 	}
 
 #ifdef SSL_CTRL_SELECT_CURRENT_CERT
 	/* OpenSSL 1.0.2+ */
 	SSL_CTX_select_current_cert(ssl_ctx_, cert_);
 #endif
+
+	STACK_OF(X509)*		chain = NULL;
 
 #ifdef SSL_CTRL_GET_EXTRA_CHAIN_CERTS
 	/* OpenSSL 1.0.1+ */
@@ -793,62 +700,59 @@ void OcspClient::update_response(
 	chain = ssl_ctx_->extra_certs;
 #endif
 
-	if (OCSP_basic_verify(basic, chain, store,
+	if (OCSP_basic_verify(basic.get(), chain, store,
 		verify_ ? OCSP_TRUSTOTHER : OCSP_NOVERIFY)
 		!= 1)
 	{
 		warnx("OCSP_basic_verify() failed");
-		goto error;
+		return;
 	}
 
-	id = OCSP_cert_to_id(NULL, cert_, issuer_);
+	UniquePtr<OCSP_CERTID> id( OCSP_cert_to_id(NULL, cert_, issuer_));
 	if (id == NULL)
 	{
 		warnx("OCSP_cert_to_id() failed");
-		goto error;
+		return;
 	}
 
-	if (OCSP_resp_find_status(basic, id, &resp_status, NULL, NULL,
+
+	ASN1_GENERALIZEDTIME*	thisupdate = NULL;
+	ASN1_GENERALIZEDTIME*	nextupdate = NULL;
+
+	if (OCSP_resp_find_status(basic.get(), id.get(), &resp_status, NULL, NULL,
 		&thisupdate, &nextupdate)
 		!= 1)
 	{
 		warnx("certificate status not found in the OCSP response");
-		goto error;
+		return;
 	}
 
 	if (resp_status != V_OCSP_CERTSTATUS_GOOD)
 	{
 		warnx("certificate status \"%s\" in the OCSP response",
 					OCSP_cert_status_str(resp_status));
-		goto error;
+		return;
 	}
 
 	if (OCSP_check_validity(thisupdate, nextupdate, 300, -1) != 1) 
 	{
 		warnx("OCSP_check_validity() failed");
-		goto error;
+		return;
 	}
 
+	time_t	valid = 0;
 	if (nextupdate)
 	{
 		valid = stapling_time(nextupdate);
 		if (valid == (time_t)-1) 
 		{
 			warnx("invalid nextUpdate time in certificate status");
-			goto error;
+			return;
 		}
 
 	}
 
-	write_response(ocsp);
-
-	OCSP_CERTID_free(id);
-	OCSP_BASICRESP_free(basic);
-	OCSP_RESPONSE_free(ocsp);
-
-	id = NULL;
-	basic = NULL;
-	ocsp = NULL;
+	write_response(ocsp.get());
 
 	/* copy the response to memory not in ctx->pool */
 	ocsp_response_.resize(buflen);
@@ -858,22 +762,6 @@ void OcspClient::update_response(
 		OCSP_cert_status_str(resp_status), buflen);
 
 	return;
-
-error:
-	if (id)
-	{
-		OCSP_CERTID_free(id);
-	}
-
-	if (basic)
-	{
-		OCSP_BASICRESP_free(basic);
-	}
-
-	if (ocsp)
-	{
-		OCSP_RESPONSE_free(ocsp);
-	}
 }
 
 void OcspClient::write_response(
@@ -884,7 +772,7 @@ void OcspClient::write_response(
 		return;
 	}
 
-	BIO* bio = BIO_new_file(response_file_.c_str(), "wb");
+	UniquePtr<BIO> bio( BIO_new_file(response_file_.c_str(), "wb"));
 	if (bio == NULL)
 	{
 		warnx("ocsp response BIO_new_file(\"%s\", w) failed",
@@ -892,16 +780,6 @@ void OcspClient::write_response(
 		return;
 	}
 
-#if 0
-	int writebyte = BIO_write(bio, ocsp_response_.data(), ocsp_response_.size());
-	BIO_free(bio);
-	if (writebyte <= 0)
-	{
-		warnx("ocsp response write(\"%s\") failed",
-			response_file_.c_str());
-	}
-	return;
-#else
 	//	i2d_OCSP_RESPONSE_bio(bio, ocsp);
 	OcspClient::OcspBuff resp;
 
@@ -910,7 +788,7 @@ void OcspClient::write_response(
 	{
 		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
 			response_file_.c_str());
-		goto failed;
+		return;
 	}
 
 	resp.resize(len);
@@ -921,26 +799,22 @@ void OcspClient::write_response(
 	{
 		warnx("i2d_OCSP_RESPONSE(\"%s\") failed",
 			response_file_.c_str());
-		goto failed;
+		return;
 	}
 
-	int writebyte = BIO_write(bio, resp.data(), resp.size());
+	int writebyte = BIO_write(bio.get(), resp.data(), resp.size());
 	if (writebyte <= 0)
 	{
 		warnx("ocsp response write(\"%s\") failed",
 			response_file_.c_str());
 	}
 
-failed:
-	BIO_free(bio);
 	return;
-#endif
 }
 
 
 time_t OcspClient::stapling_time(ASN1_GENERALIZEDTIME *asn1time)
 {
-
 	/*
 	 * OpenSSL doesn't provide a way to convert ASN1_GENERALIZEDTIME
 	 * into time_t.  To do this, we use ASN1_GENERALIZEDTIME_print(),
@@ -948,7 +822,7 @@ time_t OcspClient::stapling_time(ASN1_GENERALIZEDTIME *asn1time)
 	 * "Feb  3 00:55:52 2015 GMT"), and parse the result.
 	 */
 
-	BIO* bio = BIO_new(BIO_s_mem());
+	UniquePtr<BIO> bio( BIO_new(BIO_s_mem()) );
 	if (bio == NULL)
 	{
 		return -1;
@@ -956,15 +830,13 @@ time_t OcspClient::stapling_time(ASN1_GENERALIZEDTIME *asn1time)
 
 	/* fake weekday prepended to match C asctime() format */
 
-	BIO_write(bio, "Tue ", sizeof("Tue ") - 1);
-	ASN1_GENERALIZEDTIME_print(bio, asn1time);
+	BIO_write(bio.get(), "Tue ", sizeof("Tue ") - 1);
+	ASN1_GENERALIZEDTIME_print(bio.get(), asn1time);
 
 	char    *value = NULL;
-	size_t len = BIO_get_mem_data(bio, &value);
+	size_t len = BIO_get_mem_data(bio.get(), &value);
 
 	time_t time = curl_getdate(value, NULL);
-
-	BIO_free(bio);
 
 	return time;
 }

@@ -7,6 +7,8 @@
 #include "ServerConnection.h"
 #include "OcspClient.h"
 
+using namespace openssl;
+
 static void* startServer(void *p)
 {
 	ServerAcceptHandler *serverHandler = (ServerAcceptHandler *)p;
@@ -35,8 +37,7 @@ static void timercb(
 
 static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
 {
-
-#if (1)
+#ifdef DEBUG_CERT_VERIFY
 	char*				subject;
 	char*				issuer;
 	int					err;
@@ -63,15 +64,15 @@ static int ssl_verify_callback(int ok, X509_STORE_CTX *x509_store)
 		warnx("(%s)", X509_verify_cert_error_string(err));
 	}
 
-	if (xsname)
-	{
-		OPENSSL_free(subject);
-	}
+	//if (xsname)
+	//{
+	//	OPENSSL_free(subject);
+	//}
 
-	if (xiname)
-	{
-		OPENSSL_free(issuer);
-	}
+	//if (xiname)
+	//{
+	//	OPENSSL_free(issuer);
+	//}
 #endif
 
 	return 1;
@@ -97,13 +98,14 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, event_()
 	, setting_(setting)
 	, ssl_ctx_(nullptr)
+	, default_ssl_ctx_()
 	, ssl_socket_(0)
 	, connections_()
 	, response_rule_()
 	, response_mutex(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
 	, timerev_(nullptr)
 	, listeners_()
-	, cert_(NULL)
+	, cert_()
 	, ocsp_()
 {
 	//curl_global_init(CURL_GLOBAL_ALL);
@@ -142,20 +144,7 @@ ServerAcceptHandler::~ServerAcceptHandler()
 		itr = listeners_.erase(itr);
 	}
 
-
 	stop();
-
-	if (cert_ != NULL)
-	{
-		X509_free(cert_);
-		cert_ = NULL;
-	}
-
-	if (ssl_ctx_ != setting_.ssl_ctx)
-	{
-		SSL_CTX_free(ssl_ctx_);
-		ssl_ctx_ = nullptr;
-	}
 
 	if (dothread_ == false)
 	{
@@ -196,13 +185,13 @@ void ServerAcceptHandler::termSocket()
 
 SSL_CTX * ServerAcceptHandler::setup_default_tls()
 {
-	SSL_CTX* ctx = SSL_CTX_new(TLSv1_2_server_method());
+	UniquePtr<SSL_CTX> ctx( SSL_CTX_new(TLSv1_2_server_method()));
 	if (ctx == NULL)
 	{
-		return ctx;
+		return nullptr;
 	}
 
-	SSL_CTX_set_options(ctx,
+	SSL_CTX_set_options(ctx.get(),
 		SSL_OP_SINGLE_DH_USE |
 		SSL_OP_SINGLE_ECDH_USE |
 		SSL_OP_NO_SSLv2);
@@ -214,80 +203,65 @@ SSL_CTX * ServerAcceptHandler::setup_default_tls()
 	if (!ecdh)
 	{ 
 		die_most_horribly_from_openssl_error("EC_KEY_new_by_curve_name");
-		SSL_CTX_free(ctx);
 		return nullptr;
 	}
 
-	if (1 != SSL_CTX_set_tmp_ecdh(ctx, ecdh))
+	if (1 != SSL_CTX_set_tmp_ecdh(ctx.get(), ecdh))
 	{ 
 		die_most_horribly_from_openssl_error("SSL_CTX_set_tmp_ecdh");
-		SSL_CTX_free(ctx);
 		return nullptr;
 	}
 
 	int32_t ret = 0;
-	X509*	cert = NULL;
+	UniquePtr<X509>	cert;
 
 	ret = setup_server_certs(
-				ctx, 
+				ctx.get(), 
 				setting_.certificate_chain.c_str(),
 				setting_.private_key.c_str(),
-				&cert);
+				cert);
+
 	if (ret != 0)
 	{
-		if (cert != NULL)
-		{
-			X509_free(cert);
-		}
-		SSL_CTX_free(ctx);
 		return nullptr;
 	}
 
 	if (setting_.enable_clientverify != false)
 	{
 		ret = setup_client_certs(
-					ctx,
+					ctx.get(),
 					setting_.client_certificate,
 					setting_.verify_depth);
 
 		if (ret != 0)
 		{
-			if (cert != NULL)
-			{
-				X509_free(cert);
-			}
-			SSL_CTX_free(ctx);
 			return nullptr;
 		}
 
 	}
-
 
 	if (setting_.enable_ocsp_stapling != false)
 	{
 		ret = setup_ocsp_stapling(
-					ctx,
-					cert);
+					ctx.get(),
+					cert.get());
 		if (ret != 0)
 		{
-			if (cert != NULL)
-			{
-				X509_free(cert);
-			}
-			SSL_CTX_free(ctx);
 			return nullptr;
 		}
 	}
 
+	cert_ = std::move(cert);
+	default_ssl_ctx_ = std::move(ctx);
 
-	return ctx;
+	return default_ssl_ctx_.get();
 }
 
 int32_t ServerAcceptHandler::setup_server_certs(
 				SSL_CTX *ctx,
 				const char *certificate_chain,
 				const char *private_key,
-				X509**		cert)
+				openssl::UniquePtr<X509>&	cert)
 {
 	warnx("Loading certificate chain from '%s'\n"
 		"and private key from '%s'\n",
@@ -295,16 +269,16 @@ int32_t ServerAcceptHandler::setup_server_certs(
 
 	ERR_clear_error();      /* clear error stack for
 							 * SSL_CTX_use_certificate() */
-	*cert = load_certchain(certificate_chain, ctx);
-	if (*cert == NULL)
+	
+	UniquePtr<X509> loadcert;
+	load_certchain(certificate_chain, ctx, loadcert);
+	if (loadcert == NULL)
 	{
 		return -1;
 	}
 
 	if (1 != SSL_CTX_use_PrivateKey_file(ctx, private_key, SSL_FILETYPE_PEM))
 	{
-		X509_free(*cert);
-		*cert = NULL;
 		die_most_horribly_from_openssl_error("SSL_CTX_use_PrivateKey_file");
 		return -1;
 	}
@@ -312,38 +286,38 @@ int32_t ServerAcceptHandler::setup_server_certs(
 
 	if (1 != SSL_CTX_check_private_key(ctx))
 	{
-		X509_free(*cert);
-		*cert = NULL;
 		die_most_horribly_from_openssl_error("SSL_CTX_check_private_key");
 		return -1;
 	}
 
+	cert = std::move(loadcert);
+
 	return 0;
 }
 
-X509* ServerAcceptHandler::load_certchain(
+void ServerAcceptHandler::load_certchain(
 	const char*	cert_path,
-	SSL_CTX *ctx)
+	SSL_CTX *ctx,
+	openssl::UniquePtr<X509>& cert)
 {
 	ERR_clear_error();          /* clear error stack for
 								 * SSL_CTX_use_certificate() */
 
-	BIO* bio = BIO_new_file(cert_path, "r");
+	UniquePtr<BIO> bio( BIO_new_file(cert_path, "r"));
 	if (bio == NULL)
 	{
 		warnx("BIO_new_file(%s) failed", cert_path);
-		return NULL;
+		return;
 	}
 
-	X509* x509 = PEM_read_bio_X509_AUX(bio, NULL, NULL, NULL);
+	UniquePtr<X509> x509( PEM_read_bio_X509_AUX(bio.get(), NULL, NULL, NULL));
 	if (x509 == NULL)
 	{
 		warnx("PEM_read_bio_X509_AUX(%s) failed", cert_path);
-		BIO_free(bio);
-		return NULL;
+		return;
 	}
 
-	int ret = SSL_CTX_use_certificate(ctx, x509);
+	int ret = SSL_CTX_use_certificate(ctx, x509.get());
 	if (ERR_peek_error() != 0)
 	{
 		ret = 0;
@@ -351,22 +325,18 @@ X509* ServerAcceptHandler::load_certchain(
 
 	if (ret == 0)
 	{
-		X509_free(x509);
-		BIO_free(bio);
-		return NULL;
+		return;
 	}
 
 	int r = SSL_CTX_clear_chain_certs(ctx);
 	if (r == 0) 
 	{
-		X509_free(x509);
-		BIO_free(bio);
-		return NULL;
+		return;
 	}
 
 	for (;;)
 	{
-		X509* ca = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+		X509* ca = PEM_read_bio_X509(bio.get(), NULL, NULL, NULL);
 		if (ca == NULL)
 		{
 			u_long n = ERR_peek_last_error();
@@ -381,9 +351,7 @@ X509* ServerAcceptHandler::load_certchain(
 
 			/* some real error */
 			warnx("PEM_read_bio_X509() failed");
-			X509_free(x509);
-			BIO_free(bio);
-			return NULL;
+			return;
 		}
 
 		r = SSL_CTX_add0_chain_cert(ctx, ca);
@@ -396,15 +364,12 @@ X509* ServerAcceptHandler::load_certchain(
 		{
 			warnx("SSL_CTX_add0_chain_cert() failed");
 			X509_free(ca);
-			X509_free(x509);
-			BIO_free(bio);
-			return NULL;
+			return;
 		}
 	}
 
-	BIO_free(bio);
-
-	return x509;
+	cert = std::move(x509);
+	return;
 }
 
 

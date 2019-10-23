@@ -50,6 +50,10 @@ protected:
 	int32_t stapling_responder(
 		X509*	cert);
 
+	int send_ocsp_response(
+			SSL*	ssl,
+			X509*	cert);
+
 	void stapling_update(
 				X509*	cert);
 	void encode_base64(

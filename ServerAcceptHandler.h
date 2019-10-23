@@ -13,11 +13,12 @@
 #endif
 #include <pthread.h>
 
-#include "ServerAcceptHandler.h"
+
 #include "EventHandler.h"
 #include "ServerSetting.h"
 #include "ResponseRule.h"
 
+#include "OpenSSLTypes.h"
 
 
 class ServerConnection;
@@ -64,11 +65,12 @@ protected:
 		SSL_CTX *ctx,
 		const char *certificate_chain,
 		const char *private_key,
-		X509**		cert);
+		openssl::UniquePtr<X509>& cert);
 
-	X509* load_certchain(
+	void load_certchain(
 		const char*	cert_path,
-		SSL_CTX *ctx);
+		SSL_CTX *ctx,
+		openssl::UniquePtr<X509>& cert);
 
 	int32_t setup_client_certs(
 		SSL_CTX *ctx,
@@ -95,7 +97,8 @@ private:
 	struct event*	timerev_;
 	std::vector<struct evconnlistener*> listeners_;
 
-	X509*						cert_;
+	openssl::UniquePtr<SSL_CTX>	default_ssl_ctx_;
+	openssl::UniquePtr<X509>	cert_;
 	std::shared_ptr<OcspClient>	ocsp_;
 
 };

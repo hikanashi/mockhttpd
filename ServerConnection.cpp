@@ -1,12 +1,11 @@
 #include "ServerConnection.h"
-#include "ServerAcceptHandler.h"
-#include "EventHandler.h"
 
 #include <sys/types.h>
 
-
+#include "EventHandler.h"
 #include "util.h"
 #include "UpSessionHttp.h"
+#include "ServerAcceptHandler.h"
 
 static void server_readcb(struct bufferevent *bev, void *ptr)
 {
