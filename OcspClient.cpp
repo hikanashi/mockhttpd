@@ -446,26 +446,6 @@ int  OcspClient::send_ocsp_response(
 
 	memcpy(ocsp_resp, ocsp_response_.data(), buflen);
 
-
-#if 0
-	const unsigned char* res = ocsp_resp;
-	OCSP_RESPONSE* ocsp = d2i_OCSP_RESPONSE(NULL, &res, buflen);
-	if (ocsp == NULL)
-	{
-		warnx("d2i_OCSP_RESPONSE() failed");
-	}
-	else
-	{
-		int resp_status = OCSP_response_status(ocsp);
-
-		if (resp_status != OCSP_RESPONSE_STATUS_SUCCESSFUL)
-		{
-			warnx("OCSP response not successful (%d: %s)",
-				resp_status, OCSP_response_status_str(resp_status));
-		}
-	}
-#endif
-
 	long setresp = SSL_set_tlsext_status_ocsp_resp(ssl, ocsp_resp, buflen);
 	if(setresp == 1)
 	{
@@ -586,8 +566,7 @@ void OcspClient::stapling_update(
 
 void OcspClient::launch_request(std::string& path)
 {
-
-
+#if LIBEVENT_VERSION_NUMBER >= 0x02010b00 
 	bev_ = bufferevent_socket_new(
 		event_.getEventBase(),
 		-1,
@@ -599,7 +578,16 @@ void OcspClient::launch_request(std::string& path)
 		bev_,
 		host_.c_str(),
 		port_);
+#else
+	conn_ = evhttp_connection_base_new(
+		event_.getEventBase(),
+		NULL,
+		host_.c_str(),
+		port_);
 
+
+	bev_ = evhttp_connection_get_bufferevent(conn_);
+#endif
 	evhttp_connection_set_timeout(conn_, timeout_sec);
 	if (retry_max > 0)
 	{
