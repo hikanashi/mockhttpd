@@ -35,3 +35,4 @@ x64
 /cert/cert
 /mockhttpd.vcxproj.user
 /CMakeLists.txt
+/*.BAK

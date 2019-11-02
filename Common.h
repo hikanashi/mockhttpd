@@ -5,6 +5,10 @@
 #define WIN32_LEAN_AND_MEAN 
 #endif
 
+#ifdef __RELATIVE_FILE_PATH__
+#define __FILE__ __RELATIVE_FILE_PATH__
+#endif
+
 #include <stdint.h>
 #include <memory>
 #include <utility>
@@ -25,12 +29,14 @@
 #define warnx(...)	\
 	do {						\
 		printf("--mockhttpd- ");	\
+		printf("%s#%d\n", __FILE__, __LINE__);	\
 		printf(__VA_ARGS__);	\
 		printf("\n");			\
 	} while (0);
 #define errx(flg,...)			\
 	do {						\
 		printf("--mockhttpd- ");	\
+		printf("%s#%d", __FILE__, __LINE__);	\
 		printf(__VA_ARGS__);	\
 		printf("\n");			\
 	} while (0);
@@ -62,7 +68,7 @@ typedef int64_t ssize_t;
 		struct timespec to;		\
 		to.tv_sec = ms / 1000;	\
 		to.tv_nsec = (ms - (to.tv_sec * 1000)) * 1000;	\
-		nanosleep(ms,NULL);		\
+		nanosleep(&to,NULL);		\
 	} while (0);
 #else
 #define WAITMS(ms)			\
