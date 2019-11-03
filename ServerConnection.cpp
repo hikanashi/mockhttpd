@@ -133,6 +133,8 @@ void ServerConnection::changeTLS()
 		return;
 	}
 
+	warnx("change TLS");
+
 	ssl_ = SSL_new(ssl_ctx_);
 
 	bev_ = bufferevent_openssl_filter_new(

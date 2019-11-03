@@ -206,7 +206,7 @@ ssize_t UpSessionHttp::send(
 		std::string derimiter = "\r\n";
 		res->payload.add((uint8_t*)derimiter.c_str(), derimiter.size());
 		size_t writelen = handler_.write(res->payload.pos(), res->payload.size());
-		warnx("%s", res->payload.pos());
+		warnx("write %d", res->payload.size());
 		res->payload.drain(writelen);
 	}
 

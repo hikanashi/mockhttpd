@@ -49,8 +49,8 @@ ResponseRuleGeneral::ResponseRuleGeneral(
 	, close_no_response_(false)
 	, response_code_(responce_code)
 	, response_headers_()
-	, body_(body, bodylen)
 	, response_compress_(true)
+	, body_(body, bodylen)
 	, count_(1)
 {
 }
