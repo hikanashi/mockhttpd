@@ -50,6 +50,7 @@ ResponseRuleGeneral::ResponseRuleGeneral(
 	, response_code_(responce_code)
 	, response_headers_()
 	, body_(body, bodylen)
+	, response_compress_(true)
 	, count_(1)
 {
 }
