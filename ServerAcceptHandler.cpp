@@ -146,6 +146,13 @@ ServerAcceptHandler::~ServerAcceptHandler()
 		itr = listeners_.erase(itr);
 	}
 
+	if( timerev_ != nullptr)
+	{
+		evtimer_del(timerev_);
+		event_free(timerev_);
+	}
+
+
 
 	if (dothread_ == false)
 	{
