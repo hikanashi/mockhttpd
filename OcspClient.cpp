@@ -586,7 +586,7 @@ void OcspClient::launch_request(std::string& path)
 		port_);
 
 
-	bev_ = evhttp_connection_get_bufferevent(conn_);
+	//bev_ = evhttp_connection_get_bufferevent(conn_);
 #endif
 	evhttp_connection_set_timeout(conn_, timeout_sec);
 	if (retry_max > 0)

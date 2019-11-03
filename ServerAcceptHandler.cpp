@@ -137,6 +137,8 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 ServerAcceptHandler::~ServerAcceptHandler()
 {
 
+	stop();
+    
 	auto itr = listeners_.begin();
 	while (itr != listeners_.end())
 	{
@@ -144,7 +146,6 @@ ServerAcceptHandler::~ServerAcceptHandler()
 		itr = listeners_.erase(itr);
 	}
 
-	stop();
 
 	if (dothread_ == false)
 	{
@@ -531,12 +532,13 @@ struct evconnlistener* ServerAcceptHandler::bind_port(
 		
 		if (listener)
 		{
-			freeaddrinfo(res);
 			break;
 		}
 
 		listener = nullptr;
 	}
+
+	freeaddrinfo(res);
 
 	return listener;
 }
