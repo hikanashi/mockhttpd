@@ -11,7 +11,7 @@ set SCRIPTDIR=%~dp0
 rem openssl.cnf設定
 set SERIALNO=01
 set CRLNO=00
-set CRLURI=http://localhost/revoke.crl
+set CRLURI=http://localhost/revokecrl.pem
 set OCSPURI=http://localhost:8888/
 set DNSNAME=localhost
 
@@ -42,7 +42,7 @@ set SVR1DAY=365
 set SVR1JOIN=svr1CA.pem
 
 rem サーバ証明書設定(Revoke用)
-set SVR2SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=localhost
+set SVR2SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=localhost2
 set SVR2CRT=svr2crt.pem
 set SVR2KEY=svr2key.pem
 set SVR2CSR=svr2csr.pem
@@ -182,6 +182,9 @@ if %ERRORLEVEL% NEQ 0 goto FAILURE
 %OPENSSLCMD% req -new -x509 -config openssl.cfg -extensions rca -newkey rsa:2048 -days %ROOTCADAY% -key %ROOTCAKEY% -subj "%ROOTCASUBJ%"  > %ROOTCACRT%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
+FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %ROOTCACRT%`) do @set HASHNAME=%%i
+copy %ROOTCACRT% %HASHNAME%.0
+
 rem 中間CA作成
 %OPENSSLCMD% genrsa 2048 > %INMDCAKEY%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
@@ -191,6 +194,10 @@ if %ERRORLEVEL% NEQ 0 goto FAILURE
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 copy %INMDCACRT%+%ROOTCACRT% %INMDCAJOIN%
 del %INMDCACSR%
+
+FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %INMDCACRT%`) do @set HASHNAME=%%i
+copy %INMDCACRT% %HASHNAME%.0
+
 
 rem サーバ証明書作成
 %OPENSSLCMD% genrsa 2048 > %SVR1KEY%
@@ -203,16 +210,22 @@ copy %SVR1CRT%+%INMDCACRT% %SVR1JOIN%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 del %SVR1CSR%
 
+FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %SVR1CRT%`) do @set HASHNAME=%%i
+copy %SVR1CRT% %HASHNAME%.0
 
-rem %OPENSSLCMD% genrsa 2048 > %SVR2KEY%
-rem if %ERRORLEVEL% NEQ 0 goto FAILURE
-rem %OPENSSLCMD% req -new -config openssl.cfg -sha256 -newkey rsa:2048 -key %SVR2KEY% -subj "%SVR2SUBJ%" -out %SVR2CSR%
-rem if %ERRORLEVEL% NEQ 0 goto FAILURE
-rem %OPENSSLCMD% ca -config openssl.cfg -notext -extensions svr -md sha256 -batch -days %SVR2DAY% -keyfile %INMDCAKEY% -cert %INMDCACRT% -in %SVR2CSR% -out %SVR2CRT%
-rem if %ERRORLEVEL% NEQ 0 goto FAILURE
-rem copy %SVR2CRT%+%INMDCACRT% %SVR2JOIN%
-rem if %ERRORLEVEL% NEQ 0 goto FAILURE
-rem del %SVR2CSR%
+
+%OPENSSLCMD% ecparam -out %SVR2KEY% -name prime256v1 -genkey
+if %ERRORLEVEL% NEQ 0 goto FAILURE
+%OPENSSLCMD% req -new  -config openssl.cfg -sha256 -outform PEM -keyform PEM -key %SVR2KEY% -subj "%SVR2SUBJ%" -out %SVR2CSR%
+if %ERRORLEVEL% NEQ 0 goto FAILURE
+%OPENSSLCMD% ca -config openssl.cfg -notext -extensions svr -md sha256 -batch -days %SVR2DAY% -keyfile %INMDCAKEY% -cert %INMDCACRT% -in %SVR2CSR% -out %SVR2CRT%
+if %ERRORLEVEL% NEQ 0 goto FAILURE
+copy %SVR2CRT%+%INMDCACRT% %SVR2JOIN%
+if %ERRORLEVEL% NEQ 0 goto FAILURE
+del %SVR2CSR%
+
+FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %SVR2CRT%`) do @set HASHNAME=%%i
+copy %SVR2CRT% %HASHNAME%.0
 
 rem クライアント証明書作成
 %OPENSSLCMD% genrsa 2048 > %CLI1KEY%
@@ -238,16 +251,19 @@ rem 証明書をRevoke
 %OPENSSLCMD% ca -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% -revoke %CLI2CRT%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
-rem %OPENSSLCMD% ca -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% -revoke %SVR2CRT%
-rem if %ERRORLEVEL% NEQ 0 goto FAILURE
+%OPENSSLCMD% ca -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% -revoke %SVR2CRT%
+if %ERRORLEVEL% NEQ 0 goto FAILURE
 
 rem CRL作成
 %OPENSSLCMD%  ca -gencrl -config openssl.cfg -cert %INMDCACRT% -keyfile %INMDCAKEY% > %INMDCACRL%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
-%OPENSSLCMD%  ca -gencrl -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% > %ROOTCACRL%
-if %ERRORLEVEL% NEQ 0 goto FAILURE
-copy %INMDCACRL%+%ROOTCACRL% %CRLJOIN%
+FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% crl -hash -noout -in %INMDCACRL%`) do @set HASHNAME=%%i
+copy %INMDCACRL% %HASHNAME%.r0
+
+rem %OPENSSLCMD%  ca -gencrl -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% > %ROOTCACRL%
+rem if %ERRORLEVEL% NEQ 0 goto FAILURE
+rem copy %INMDCACRL%+%ROOTCACRL% %CRLJOIN%
 
 :SUCCESS
 echo "Successfully."
