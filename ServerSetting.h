@@ -36,7 +36,7 @@ typedef struct _SettingConnection
 		, ssl_ctx(nullptr)
 		, certificate_chain("/opt/local/SSL/svr1CA.pem")
 		, private_key("/opt/local/SSL/svr1key.pem")
-		, enable_clientverify(false)
+		, enable_clientverify(true)
 		, verify_depth(3)
 		, client_certificate("/opt/local/SSL/rootCA.pem")
 		, enable_ocsp_stapling(false)
