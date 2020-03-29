@@ -5,10 +5,6 @@
 #define WIN32_LEAN_AND_MEAN 
 #endif
 
-#ifdef __RELATIVE_FILE_PATH__
-#define __FILE__ __RELATIVE_FILE_PATH__
-#endif
-
 #include <stdint.h>
 #include <memory>
 #include <utility>

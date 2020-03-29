@@ -4,19 +4,10 @@ file(GLOB SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/http-parser/*.c
 )
 
-add_compile_options(-Wno-builtin-macro-redefined)
+include(DefineRelativeFilePaths)
 
-  foreach (SOURCE IN LISTS SOURCES)
-    file (
-      RELATIVE_PATH RELATIVE_SOURCE_PATH
-      ${PROJECT_SOURCE_DIR} ${SOURCE}
-    )
-
-    set_source_files_properties (
-      ${SOURCE} PROPERTIES
-      COMPILE_DEFINITIONS __RELATIVE_FILE_PATH__="${RELATIVE_SOURCE_PATH}"
-    )
-  endforeach ()
+cmake_append_nobuiltin_macro_compiler_flags()
+cmake_define_relative_file_paths("${SOURCES}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/http-parser)
@@ -24,3 +15,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/http-parser)
 add_library(mockhttpd STATIC
 	${SOURCES}
 )
+
+find_package(OpenSSL REQUIRED)
+target_link_libraries(mockhttpd PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+
+find_package(Libevent CONFIG REQUIRED)
+target_link_libraries(mockhttpd PRIVATE event_shared event_core_shared event_extra_shared event_openssl_shared)
+
