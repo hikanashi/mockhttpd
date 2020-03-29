@@ -1,21 +1,21 @@
 @echo off
 
-rem Ø–¾‘ì¬ƒfƒBƒŒƒNƒgƒŠ
+rem è¨¼æ˜Žæ›¸ä½œæˆãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set CERTDIR="cert"
 
-rem OpenSSLì¬ƒfƒBƒŒƒNƒgƒŠ
+rem OpenSSLä½œæˆãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
 set SCRIPTDIR=%~dp0
 
-rem openssl.cnfÝ’è
+rem openssl.cnfè¨­å®š
 set SERIALNO=01
 set CRLNO=00
 set CRLURI=http://localhost/revokecrl.pem
 set OCSPURI=http://localhost:8888/
 set DNSNAME=localhost
 
-rem RootCAÝ’è
+rem RootCAè¨­å®š
 set ROOTCASUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=RCA/CN=rca.hogesystems.com
 set ROOTCACRT=rcacrt.pem
 set ROOTCAKEY=rcakey.pem
@@ -24,7 +24,7 @@ set CRLDAY=3650
 set ROOTCACRL=rcacrl.pem
 set CRLJOIN=revokecrl.pem
 
-rem ’†ŠÔCA(ica=Intermediate CA)Ý’è
+rem ä¸­é–“CA(ica=Intermediate CA)è¨­å®š
 set INMDCASUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=ICA/CN=ica.hogesystems.com
 set INMDCACRT=icacrt.pem
 set INMDCAKEY=icakey.pem
@@ -33,7 +33,7 @@ set INMDCADAY=1825
 set INMDCACRL=icacrl.pem
 set INMDCAJOIN=rootCA.pem
 
-rem ƒT[ƒoØ–¾‘Ý’è
+rem ã‚µãƒ¼ãƒè¨¼æ˜Žæ›¸è¨­å®š
 set SVR1SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=localhost
 set SVR1CRT=svr1crt.pem
 set SVR1KEY=svr1key.pem
@@ -41,7 +41,7 @@ set SVR1CSR=svr1csr.pem
 set SVR1DAY=365
 set SVR1JOIN=svr1CA.pem
 
-rem ƒT[ƒoØ–¾‘Ý’è(Revoke—p)
+rem ã‚µãƒ¼ãƒè¨¼æ˜Žæ›¸è¨­å®š(Revokeç”¨)
 set SVR2SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=localhost2
 set SVR2CRT=svr2crt.pem
 set SVR2KEY=svr2key.pem
@@ -50,7 +50,7 @@ set SVR2DAY=365
 set SVR2JOIN=svr2CA.pem
 
 
-rem ƒNƒ‰ƒCƒAƒ“ƒgØ–¾‘Ý’è
+rem ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆè¨¼æ˜Žæ›¸è¨­å®š
 set CLI1SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=pc1.testexample.com
 set CLI1CRT=pc1crt.pem
 set CLI1KEY=pc1key.pem
@@ -58,7 +58,7 @@ set CLI1CSR=pc1csr.pem
 set CLI1DAY=365
 set CLI1JOIN=pc1CA.pem
 
-rem ƒNƒ‰ƒCƒAƒ“ƒgØ–¾‘Ý’è(Revoke—p)
+rem ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆè¨¼æ˜Žæ›¸è¨­å®š(Revokeç”¨)
 set CLI2SUBJ=/C=JP/ST=Tokyo/L=Roppongi/O=HogeSystems/OU=JTAC/CN=pc2.testexample.com
 set CLI2CRT=pc2crt.pem
 set CLI2KEY=pc2key.pem
@@ -74,14 +74,14 @@ if not exist %CERTDIR% (
 cd %CERTDIR%
 
 
-rem ID‚ð¶¬
+rem IDã‚’ç”Ÿæˆ
 echo %SERIALNO% > serial
 echo %CRLNO% > crlnumber
 
-rem index.txt(‹óƒtƒ@ƒCƒ‹)‚ð¶¬
+rem index.txt(ç©ºãƒ•ã‚¡ã‚¤ãƒ«)ã‚’ç”Ÿæˆ
 type nul > index.txt
 
-rem openssl.cnf ¶¬
+rem openssl.cnf ç”Ÿæˆ
 (
 echo.HOME			= .
 echo.RANDFILE		= $ENV::HOME/.rnd
@@ -176,7 +176,7 @@ echo.extendedKeyUsage = critical, OCSPSigning
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
 
-rem RootCAì¬
+rem RootCAä½œæˆ
 %OPENSSLCMD% genrsa 2048 > %ROOTCAKEY%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 %OPENSSLCMD% req -new -x509 -config openssl.cfg -extensions rca -newkey rsa:2048 -days %ROOTCADAY% -key %ROOTCAKEY% -subj "%ROOTCASUBJ%"  > %ROOTCACRT%
@@ -185,7 +185,7 @@ if %ERRORLEVEL% NEQ 0 goto FAILURE
 FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %ROOTCACRT%`) do @set HASHNAME=%%i
 copy %ROOTCACRT% %HASHNAME%.0
 
-rem ’†ŠÔCAì¬
+rem ä¸­é–“CAä½œæˆ
 %OPENSSLCMD% genrsa 2048 > %INMDCAKEY%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 %OPENSSLCMD% req -new -config openssl.cfg -sha256 -newkey rsa:2048 -key %INMDCAKEY% -subj "%INMDCASUBJ%" > %INMDCACSR%
@@ -199,7 +199,7 @@ FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %
 copy %INMDCACRT% %HASHNAME%.0
 
 
-rem ƒT[ƒoØ–¾‘ì¬
+rem ã‚µãƒ¼ãƒè¨¼æ˜Žæ›¸ä½œæˆ
 %OPENSSLCMD% genrsa 2048 > %SVR1KEY%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 %OPENSSLCMD% req -new -config openssl.cfg -sha256 -newkey rsa:2048 -key %SVR1KEY% -subj "%SVR1SUBJ%" -out %SVR1CSR%
@@ -227,7 +227,7 @@ del %SVR2CSR%
 FOR /F "usebackq tokens=*" %%i in (`%OPENSSLCMD% x509 -subject_hash -noout -in %SVR2CRT%`) do @set HASHNAME=%%i
 copy %SVR2CRT% %HASHNAME%.0
 
-rem ƒNƒ‰ƒCƒAƒ“ƒgØ–¾‘ì¬
+rem ã‚¯ãƒ©ã‚¤ã‚¢ãƒ³ãƒˆè¨¼æ˜Žæ›¸ä½œæˆ
 %OPENSSLCMD% genrsa 2048 > %CLI1KEY%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 %OPENSSLCMD% req -new -config openssl.cfg -sha256 -newkey rsa:2048 -key %CLI1KEY% -subj "%CLI1SUBJ%" -out %CLI1CSR%
@@ -247,14 +247,14 @@ if %ERRORLEVEL% NEQ 0 goto FAILURE
 copy %CLI2CRT%+%INMDCACRT% %CLI2JOIN%
 del %CLI2CSR%
 
-rem Ø–¾‘‚ðRevoke
+rem è¨¼æ˜Žæ›¸ã‚’Revoke
 %OPENSSLCMD% ca -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% -revoke %CLI2CRT%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
 %OPENSSLCMD% ca -config openssl.cfg -cert %ROOTCACRT% -keyfile %ROOTCAKEY% -revoke %SVR2CRT%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 
-rem CRLì¬
+rem CRLä½œæˆ
 %OPENSSLCMD%  ca -gencrl -config openssl.cfg -cert %INMDCACRT% -keyfile %INMDCAKEY% > %INMDCACRL%
 if %ERRORLEVEL% NEQ 0 goto FAILURE
 

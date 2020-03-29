@@ -7,8 +7,8 @@
 
 typedef enum _PATH_MATCH_PATTERN
 {
-	PATH_MATCH_PATTERN_COMPLETE = 0,	// Š®‘Sˆê’v
-	PATH_MATCH_PATTERN_FORWARD,			// ‘O•ûˆê’v
+	PATH_MATCH_PATTERN_COMPLETE = 0,	// å®Œå…¨ä¸€è‡´
+	PATH_MATCH_PATTERN_FORWARD,			// å‰æ–¹ä¸€è‡´
 } PATH_MATCH_PATTERN;
 
 class ResponseRuleGeneral : public ResponseRule

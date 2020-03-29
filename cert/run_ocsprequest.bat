@@ -1,9 +1,9 @@
 @echo off
 
-rem Ø–¾‘ì¬ƒfƒBƒŒƒNƒgƒŠ
+rem è¨¼æ˜æ›¸ä½œæˆãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set CERTDIR="cert"
 
-rem OpenSSLƒfƒBƒŒƒNƒgƒŠ
+rem OpenSSLãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
 set OCSPURL=http://localhost
@@ -12,11 +12,11 @@ set OCSPRESPONSE=ocsp_resp.der
 
 set SCRIPTDIR=%~dp0
 
-rem ’†ŠÔCA(ica=Intermediate CA)İ’è
+rem ä¸­é–“CA(ica=Intermediate CA)è¨­å®š
 set INMDCACRT=icacrt.pem
 set INMDCAJOIN=rootCA.pem
 
-rem ƒT[ƒoØ–¾‘İ’è
+rem ã‚µãƒ¼ãƒè¨¼æ˜æ›¸è¨­å®š
 set SVR1CRT=svr1crt.pem
 set SVR1JOIN=svr1CA.pem
 

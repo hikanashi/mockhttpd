@@ -1,14 +1,14 @@
 @echo off
 
-rem Ø–¾‘ì¬ƒfƒBƒŒƒNƒgƒŠ
+rem è¨¼æ˜æ›¸ä½œæˆãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set CERTDIR="cert"
 
-rem OpenSSLƒfƒBƒŒƒNƒgƒŠ
+rem OpenSSLãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒª
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
 set OCSPPORT=8888
 
-rem ’†ŠÔCA(ica=Intermediate CA)İ’è
+rem ä¸­é–“CA(ica=Intermediate CA)è¨­å®š
 set INMDCACRT=icacrt.pem
 set INMDCAKEY=icakey.pem
 set INMDCAJOIN=rootCA.pem
