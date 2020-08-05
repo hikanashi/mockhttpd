@@ -1,6 +1,7 @@
 #include "ResponseRuleGeneral.h"
 #include "http-parser/http_parser.h"
 #include <algorithm>
+#include <regex>
 #include "GzipDeflater.h"
 
 ResponseRuleGeneral::ResponseRuleGeneral()
@@ -73,12 +74,8 @@ bool ResponseRuleGeneral::IsMatch(
 
 	if (path_match_ == PATH_MATCH_PATTERN_COMPLETE)
 	{
-		if (path_.size() == 0 ||
-			path_ == req.path)
-		{
-			return true;
-		}
-		else
+		if (path_.size() != 0 &&
+			path_ != req.path)
 		{
 			return false;
 		}
@@ -86,18 +83,32 @@ bool ResponseRuleGeneral::IsMatch(
 
 	if (path_match_ == PATH_MATCH_PATTERN_FORWARD)
 	{
-		if (req.path.size() >= path_.size() &&
-			std::equal(std::begin(path_), std::end(path_), std::begin(req.path)))
-		{
-			return true;
-		}
-		else
+		if (req.path.size() < path_.size() ||
+			std::equal(std::begin(path_), std::end(path_), std::begin(req.path)) != true )
 		{
 			return false;
 		}
 	}
 
-	return false;
+	for (auto& headfield : request_headers_.getFields())
+	{
+		HttpHeaderField* header = req.headers.get(headfield.name.c_str());
+		if (header == nullptr)
+		{
+			return false;
+		}
+
+
+		std::regex re(headfield.value.c_str());
+		std::smatch match;
+
+		if (std::regex_search(header->value, match, re) == false)
+		{
+			return false;
+		}
+	}
+
+	return true;
 }
 
 bool ResponseRuleGeneral::IsDeleteRule()
