@@ -11,7 +11,7 @@
 #ifndef HAVE_STRUCT_TIMESPEC
 #define HAVE_STRUCT_TIMESPEC
 #endif
-#include <pthread.h>
+#include <thread>
 #include <mutex>
 
 #include "EventHandler.h"
@@ -84,8 +84,7 @@ protected:
 
 
 private:
-	bool	dothread_;
-	pthread_t thread_;
+	std::thread thread_;
 	bool	is_runnning_;
 	EventHandler  event_;
 	SettingConnection setting_;

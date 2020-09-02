@@ -9,13 +9,9 @@
 
 using namespace openssl;
 
-static void* startServer(void *p)
+static void startServer(ServerAcceptHandler* serverHandler)
 {
-	ServerAcceptHandler *serverHandler = (ServerAcceptHandler *)p;
 	serverHandler->start_listen();
-	pthread_exit(NULL);
-
-	return NULL;
 }
 
 static void acceptcb(
@@ -93,8 +89,7 @@ static void die_most_horribly_from_openssl_error(const char *func)
 
 
 ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
-	: dothread_(false)
-	, thread_()
+	: thread_()
 	, is_runnning_(false)
 	, event_()
 	, setting_(setting)
@@ -153,29 +148,17 @@ ServerAcceptHandler::~ServerAcceptHandler()
 		event_free(timerev_);
 	}
 
-	if (dothread_ == false)
+	if (thread_.joinable())
 	{
-		return;
+		thread_.join();
 	}
 
-	int ret = pthread_join(thread_, NULL);
-	if (ret != 0)
-	{
-		errx(1, "can not join thread %d", ret);
-	}
+	
 }
 
 void ServerAcceptHandler::start()
 {
-	int ret = pthread_create(&thread_, NULL, startServer, (void *)this);
-	if (ret != 0)
-	{
-		errx(1, "can not create thread : %s", strerror(ret));
-	}
-	else
-	{
-		dothread_ = true;
-	}
+	thread_ = std::thread(startServer, this);
 }
 
 void ServerAcceptHandler::stop()
