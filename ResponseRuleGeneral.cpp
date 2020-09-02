@@ -150,7 +150,17 @@ ssize_t ResponseRuleGeneral::setResponse(
 							HttpRequest&  req,
 							HttpResponse& res)
 {
-	WAITMS(wait_msec_);
+	// WAITMS(wait_msec_);
+	uint64_t wait_count = wait_msec_ / 100;
+	for(uint64_t count = 0; count < wait_count; count++)
+	{ 
+		if (IsRunning() == false)
+		{
+			return -1;
+		}
+
+		WAITMS(100);
+	}
 
 	if (close_no_response_)
 	{

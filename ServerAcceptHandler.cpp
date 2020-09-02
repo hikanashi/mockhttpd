@@ -95,6 +95,7 @@ static void die_most_horribly_from_openssl_error(const char *func)
 ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	: dothread_(false)
 	, thread_()
+	, is_runnning_(false)
 	, event_()
 	, setting_(setting)
 	, ssl_ctx_(nullptr)
@@ -102,7 +103,7 @@ ServerAcceptHandler::ServerAcceptHandler(SettingConnection& setting)
 	, ssl_socket_(0)
 	, connections_()
 	, response_rule_()
-	, response_mutex(PTHREAD_ERRORCHECK_MUTEX_INITIALIZER_NP)
+	, response_mutex_()
 	, timerev_(nullptr)
 	, listeners_()
 	, cert_()
@@ -179,7 +180,13 @@ void ServerAcceptHandler::start()
 
 void ServerAcceptHandler::stop()
 {
+	is_runnning_ = false;
 	event_.stop();
+}
+
+bool ServerAcceptHandler::isRunning() const
+{
+	return is_runnning_;
 }
 
 void ServerAcceptHandler::termSocket()
@@ -188,6 +195,8 @@ void ServerAcceptHandler::termSocket()
 	WSACleanup();
 #endif
 }
+
+
 
 SSL_CTX * ServerAcceptHandler::setup_default_tls()
 {
@@ -491,6 +500,7 @@ void ServerAcceptHandler::start_listen()
 
 	if(listeners_.size() > 0)
 	{
+		is_runnning_ = true;
 		event_.loop();
 	}
 	else
@@ -609,18 +619,24 @@ void ServerAcceptHandler::removeSocket(
 void ServerAcceptHandler::addResponse(
 	ResponseRulePtr response)
 {
-	pthread_mutex_lock(&response_mutex);
+	std::lock_guard<std::recursive_mutex> lk(response_mutex_);
+
+	if (!response)
+	{
+		return;
+	}
+
+	response->setHandle(this);
 
 	response_rule_.push_back(response);
 
-	pthread_mutex_unlock(&response_mutex);
 }
 
 ResponseRulePtr ServerAcceptHandler::popResponse(
 						HttpRequest&     req)
 {
 	ResponseRulePtr rule;
-	pthread_mutex_lock(&response_mutex);
+	std::lock_guard<std::recursive_mutex> lk(response_mutex_);
 
 	auto itr = response_rule_.begin();
 	while (itr != response_rule_.end())
@@ -640,6 +656,6 @@ ResponseRulePtr ServerAcceptHandler::popResponse(
 			itr++;
 		}
 	}
-	pthread_mutex_unlock(&response_mutex);
+
 	return rule;
 }

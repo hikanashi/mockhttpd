@@ -4,12 +4,17 @@
 #include "Common.h"
 #include "HttpHeader.h"
 
+class ServerAcceptHandler;
+
 class ResponseRule
 {
 public:
-	ResponseRule() {};
-	virtual ~ResponseRule() {};
+	ResponseRule();
+	virtual ~ResponseRule();
 	
+	void  setHandle(ServerAcceptHandler* handle);
+	bool  IsRunning();
+
 	virtual bool IsMatch(
 				HttpRequest&     req) = 0;
 	
@@ -27,6 +32,7 @@ public:
 protected:
 
 private:
+	ServerAcceptHandler*	handle_;
 };
 
 typedef std::shared_ptr<ResponseRule> ResponseRulePtr;

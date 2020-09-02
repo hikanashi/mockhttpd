@@ -12,7 +12,7 @@
 #define HAVE_STRUCT_TIMESPEC
 #endif
 #include <pthread.h>
-
+#include <mutex>
 
 #include "EventHandler.h"
 #include "ServerSetting.h"
@@ -34,6 +34,7 @@ public:
 	void stop();
 	static void termSocket();
 
+	bool isRunning() const;
 
 	const SettingConnection& getSetting() const{ return setting_;}
 
@@ -85,6 +86,7 @@ protected:
 private:
 	bool	dothread_;
 	pthread_t thread_;
+	bool	is_runnning_;
 	EventHandler  event_;
 	SettingConnection setting_;
 	SSL_CTX*	ssl_ctx_;
@@ -93,7 +95,7 @@ private:
 	std::vector<std::unique_ptr<ServerConnection> > connections_;
 
 	std::vector< ResponseRulePtr > response_rule_;
-	pthread_mutex_t  response_mutex;
+	std::recursive_mutex response_mutex_;
 	struct event*	timerev_;
 	std::vector<struct evconnlistener*> listeners_;
 
