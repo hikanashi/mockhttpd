@@ -1,7 +1,7 @@
 
 file(GLOB SOURCES
-	${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/http-parser/*.c
+	${CMAKE_CURRENT_SOURCE_DIR}/*.*
+	${CMAKE_CURRENT_SOURCE_DIR}/http-parser/*.*
 )
 
 include(DefineRelativeFilePaths)
