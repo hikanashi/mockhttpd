@@ -63,7 +63,7 @@ typedef int64_t ssize_t;
 		if(ms <= 0 ) break;		\
 		struct timespec to;		\
 		to.tv_sec = ms / 1000;	\
-		to.tv_nsec = (ms - (to.tv_sec * 1000)) * 1000;	\
+		to.tv_nsec = (ms - (to.tv_sec * 1000)) * 1000 * 1000;	\
 		nanosleep(&to,NULL);		\
 	} while (0);
 #else
