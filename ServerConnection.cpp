@@ -211,18 +211,18 @@ int ServerConnection::readcb(struct bufferevent *bev)
 
 	if (readlen >= 0)
 	{
-		datalen = readlen;
+		datalen = static_cast<size_t>(readlen);
 		readlen = 0;
 	}
 		
-	if (evbuffer_drain(input, (size_t)datalen) != 0)
+	if (evbuffer_drain(input, datalen) != 0)
 	{
 		warnx("Fatal error: evbuffer_drain failed");
 		return -1;
 	}
 
 
-	return readlen;
+	return static_cast<int>(readlen);
 }
 
 
@@ -255,8 +255,10 @@ int ServerConnection::eventcb(struct bufferevent *bev, short events)
 	}
 	else if (events & BEV_EVENT_ERROR)
 	{
-		int64_t sockerr = EVUTIL_SOCKET_ERROR();
-		warnx("sock error %d(%s)", sockerr,evutil_socket_error_to_string(sockerr));
+		int sockerr = EVUTIL_SOCKET_ERROR();
+		warnx("sock error %d(%s)", 
+			sockerr,
+			evutil_socket_error_to_string(sockerr));
 		warnx("%s network error\n", client_addr_.c_str());
 	}
 	else if (events & BEV_EVENT_TIMEOUT)
