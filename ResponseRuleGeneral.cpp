@@ -242,16 +242,23 @@ void ResponseRuleGeneral::appendRequestHeaderRule(
 						const char*	name,
 						const char* value)
 {
-	request_headers_.append(
-						name,value);
+	auto header = request_headers_.get(name);
+	if (header != nullptr)
+	{
+		request_headers_.append(
+			name, value);
+	}
+	else
+	{
+		header->value = value;
+
+	}
 }
 
-void ResponseRuleGeneral::appendResponseHeaderRule(
-						const char*	name,
-						const char* value)
+void ResponseRuleGeneral::deleteRequestHeaderRule(
+						const char*	name)
 {
-	response_headers_.append(
-						name,value);
+	response_headers_.remove(name);
 }
 
 void ResponseRuleGeneral::setBody(

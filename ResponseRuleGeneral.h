@@ -33,6 +33,8 @@ public:
 	void appendRequestHeaderRule(
 		const char*	name,
 		const char* value);
+	void deleteRequestHeaderRule(
+		const char*	name);
 
 
 	void setCheckCallback(
