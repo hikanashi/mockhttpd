@@ -586,8 +586,14 @@ void ServerAcceptHandler::removeSocket(
 
 	if (connections_.size() <= 0)
 	{
-		if (setting_.exit_time.tv_sec == 0 &&
+		if( setting_.exit_time.tv_sec == 0 && 
 			setting_.exit_time.tv_usec == 0)
+		{
+			stop();
+		}
+		else
+		if( setting_.exit_time.tv_sec < 0 ||
+			setting_.exit_time.tv_usec < 0)
 		{
 			stop();
 		}
