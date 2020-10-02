@@ -49,7 +49,10 @@ namespace util
 
 	void dumpbinary(const uint8_t* data, size_t datalen)
 	{
+#ifndef DUMPBINARY
 		return;
+#endif
+		char dumpstr[16+1] = { 0 };
 
 		size_t count = 0;
 		const uint8_t* dump = data;
@@ -82,8 +85,31 @@ namespace util
 			//			<< ( int )dump[count]
 			//			<< " ";
 
+			dumpstr[count % 16] = dump[count];
+
 			if( count % 16 == 15 )
 			{
+				printf("[");
+				for (size_t idx = 0; idx < 16; idx++)
+				{
+					switch (dumpstr[idx])
+					{
+					case 10:
+						printf("\\n");
+						break;
+					case 13:
+						printf("\\r");
+						break;
+
+					default:
+						printf("%c", dumpstr[idx]);
+						break;
+					}
+				}
+				printf("]");
+
+				memset(dumpstr, 0, sizeof(dumpstr));
+
         		std::cout << std::endl;
 			}
 
@@ -91,8 +117,28 @@ namespace util
 
 		}
 
+
 		if( count % 16 != 0 )
 		{
+			printf("[");
+			for (size_t idx = 0; idx < 16; idx++)
+			{
+				switch (dumpstr[idx])
+				{
+				case 10:
+					printf("\\n");
+					break;
+				case 13:
+					printf("\\r");
+					break;
+
+				default:
+					printf("%c", dumpstr[idx]);
+					break;
+				}
+			}
+			printf("]");
+
     		std::cout << std::endl;
 		}
 
