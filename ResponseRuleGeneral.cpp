@@ -245,13 +245,12 @@ void ResponseRuleGeneral::appendRequestHeaderRule(
 	auto header = request_headers_.get(name);
 	if (header != nullptr)
 	{
-		request_headers_.append(
-			name, value);
+		header->value = value;
 	}
 	else
 	{
-		header->value = value;
-
+		request_headers_.append(
+			name, value);
 	}
 }
 
