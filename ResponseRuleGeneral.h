@@ -33,7 +33,7 @@ public:
 	void appendRequestHeaderRule(
 		const char*	name,
 		const char* value);
-	void deleteRequestHeaderRule(
+	void removeRequestHeaderRule(
 		const char*	name);
 
 

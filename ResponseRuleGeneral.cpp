@@ -254,11 +254,28 @@ void ResponseRuleGeneral::appendRequestHeaderRule(
 	}
 }
 
-void ResponseRuleGeneral::deleteRequestHeaderRule(
+void ResponseRuleGeneral::removeRequestHeaderRule(
 						const char*	name)
 {
 	response_headers_.remove(name);
 }
+
+void ResponseRuleGeneral::appendResponseHeaderRule(
+	const char*	name,
+	const char* value)
+{
+	auto header = response_headers_.get(name);
+	if (header != nullptr)
+	{
+		header->value = value;
+	}
+	else
+	{
+		response_headers_.append(
+			name, value);
+	}
+}
+
 
 void ResponseRuleGeneral::setBody(
 						const char* body, 
