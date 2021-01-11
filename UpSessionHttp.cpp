@@ -194,19 +194,18 @@ ssize_t UpSessionHttp::send(
 	for(auto& headfield : res->headers.getFields() )
 	{
 		sendbuf << headfield.name.c_str() << ": " << headfield.value << "\r\n";
+		handler_.write(sendbuf);
 	}
 	sendbuf << "\r\n";
 
-	std::string buffer = sendbuf.str();
-	handler_.write((uint8_t*)buffer.c_str(), buffer.size());
-	warnx("%s", buffer.c_str());
+	handler_.write(sendbuf);
 
 	if(res->payload.size() > 0)
 	{
 		std::string derimiter = "\r\n";
 		res->payload.add((uint8_t*)derimiter.c_str(), derimiter.size());
 		size_t writelen = handler_.write(res->payload.pos(), res->payload.size());
-		warnx("write %d", res->payload.size());
+		warnx("write BODY %d byte", res->payload.size());
 		res->payload.drain(writelen);
 	}
 
@@ -222,9 +221,7 @@ ssize_t UpSessionHttp::send(
 		}
 		sendbuf << "\r\n";
 
-		buffer = sendbuf.str();
-		handler_.write((uint8_t*)buffer.c_str(), buffer.size());
-		warnx("%s", buffer.c_str());
+		handler_.write(sendbuf);
 	}
 	return 0;
 }

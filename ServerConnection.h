@@ -13,6 +13,8 @@ class UpSession;
 class ServerConnection
 {
 public:
+	const size_t SENDPART_MAX = 10 * 1024;
+public:
 	ServerConnection(
 			ServerAcceptHandler& accept
 			, evutil_socket_t fd
@@ -30,6 +32,8 @@ public:
 	virtual size_t write(
 					const uint8_t *data,
 			        size_t length);
+	size_t write(
+					std::stringstream& sendbuf);
 
 	bool				IsSSL() { return (ssl_ctx_ != nullptr); }
 

@@ -1,6 +1,8 @@
 #include "ServerConnection.h"
 
 #include <sys/types.h>
+#include <string>
+#include <sstream>
 
 #include "EventHandler.h"
 #include "util.h"
@@ -160,10 +162,39 @@ size_t ServerConnection::write(
 		return 0;
 	}
 
-	bufferevent_write(bev_, data, length);
-	warnx("<<<<<< SERVER send len=%d", length);
-	util::dumpbinary(data,length);
+	size_t remain = length;
+	const uint8_t* buff = data;
 
+	while (remain > 0)
+	{
+		size_t size = SENDPART_MAX;
+		if (size > remain)
+		{
+			size = remain;
+		}
+
+		int writeret = bufferevent_write(bev_, buff, size);
+		warnx("<<<<<< SERVER send len=%d ret=%d", size, writeret);
+		util::dumpbinary(buff, size);
+
+		buff += size;
+		remain -= size;
+
+		switchthread();
+	}
+
+	return length;
+}
+
+size_t ServerConnection::write(
+		std::stringstream& sendbuf)
+{
+	std::string buffer = sendbuf.str();
+	size_t length = write((uint8_t*)buffer.c_str(), buffer.size());
+	warnx("SERVER send:%s", buffer.c_str());
+
+	sendbuf.str(""); // clear buffer
+	sendbuf.clear(std::stringstream::goodbit); // clear statusbit
 	return length;
 }
 
