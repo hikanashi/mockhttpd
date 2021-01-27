@@ -220,7 +220,8 @@ int ServerConnection::readcb(struct bufferevent *bev)
 		long client_verify = SSL_get_verify_result(ssl_);
 		if (client_verify != X509_V_OK)
 		{
-			warnx("client verify error %d see DIAGNOSTICS from https://www.openssl.org/docs/man1.1.1/man1/verify.html ", client_verify);
+			warnx("client verify error %d(%s) see DIAGNOSTICS from https://www.openssl.org/docs/man1.1.1/man1/verify.html ", 
+				client_verify, X509_verify_cert_error_string(client_verify));
 			return -1;
 		}
 	}
