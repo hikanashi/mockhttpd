@@ -12,7 +12,7 @@ rem openssl.cnf設定
 set SERIALNO=01
 set CRLNO=00
 set CRLURI=http://localhost/revokecrl.pem
-set OCSPURI=http://localhost:8888/
+set OCSPURI=http://localhost:8887/
 set DNSNAME=localhost
 
 rem RootCA設定

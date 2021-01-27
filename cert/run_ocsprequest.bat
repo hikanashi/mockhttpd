@@ -7,7 +7,7 @@ rem OpenSSLディレクトリ
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
 set OCSPURL=http://localhost
-set OCSPPORT=8888
+set OCSPPORT=8887
 set OCSPRESPONSE=ocsp_resp.der
 
 set SCRIPTDIR=%~dp0
@@ -28,6 +28,7 @@ if not exist %CERTDIR% (
 cd %CERTDIR%
 
 %OPENSSLCMD% ocsp -no_nonce -issuer %INMDCACRT% -cert %SVR1CRT% -CAfile %INMDCAJOIN% -url %OCSPURL% -port %OCSPPORT% -respout %OCSPRESPONSE%
+if %ERRORLEVEL% NEQ 0 goto FAILURE
 
 :SUCCESS
 echo "Successfully."

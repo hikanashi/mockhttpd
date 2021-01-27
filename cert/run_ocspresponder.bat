@@ -6,7 +6,7 @@ set CERTDIR="cert"
 rem OpenSSLディレクトリ
 set OPENSSLCMD=C:\opt\local\bin\openssl.exe
 
-set OCSPPORT=8888
+set OCSPPORT=8887
 
 rem 中間CA(ica=Intermediate CA)設定
 set INMDCACRT=icacrt.pem
@@ -31,4 +31,4 @@ goto END
 echo "ERROR STOP"
 
 :END
-rem pause
+pause
