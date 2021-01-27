@@ -696,49 +696,67 @@ void OcspClient::update_response(
 		return;
 	}
 
-	UniquePtr<OCSP_CERTID> id( OCSP_cert_to_id(NULL, cert_, issuer_));
+	/* Compute the certificate's ID */
+
+	UniquePtr<OCSP_CERTID> id;
+
+	for (int i = 0; i < sk_X509_num(chain); i++)
+	{
+		X509 *issuer = sk_X509_value(chain, i);
+		if (X509_check_issued(issuer, cert_) == X509_V_OK)
+		{
+			id.reset(OCSP_cert_to_id(EVP_sha1(), cert_, issuer));
+			break;
+		}
+	}
+
 	if (id == NULL)
 	{
-		warnx("OCSP_cert_to_id() failed");
+		warnx("Error computing OCSP ID");
 		return;
 	}
 
-
 	ASN1_GENERALIZEDTIME*	thisupdate = NULL;
 	ASN1_GENERALIZEDTIME*	nextupdate = NULL;
+	ASN1_GENERALIZEDTIME*   rev = NULL;
+	int cert_status = 0;
+	int crl_reason = 0;
+	int ret = OCSP_resp_find_status(
+					basic.get(), id.get(),
+					&cert_status, &crl_reason, &rev,
+					&thisupdate, &nextupdate);
 
-	if (OCSP_resp_find_status(basic.get(), id.get(), &resp_status, NULL, NULL,
-		&thisupdate, &nextupdate)
-		!= 1)
+	if (ret != 1)
 	{
 		warnx("certificate status not found in the OCSP response");
 		return;
 	}
 
-	if (resp_status != V_OCSP_CERTSTATUS_GOOD)
+	if (!OCSP_check_validity(thisupdate, nextupdate, 300L, -1L))
 	{
-		warnx("certificate status \"%s\" in the OCSP response",
-					OCSP_cert_status_str(resp_status));
+		warnx("OCSP response has expired");
 		return;
 	}
 
-	if (OCSP_check_validity(thisupdate, nextupdate, 300, -1) != 1) 
-	{
-		warnx("OCSP_check_validity() failed");
+	warnx("SSL certificate status: %s (%d)\n",
+		OCSP_cert_status_str(cert_status), cert_status);
+
+	switch (cert_status) {
+	case V_OCSP_CERTSTATUS_GOOD:
+		break;
+
+	case V_OCSP_CERTSTATUS_REVOKED:
+		warnx("SSL certificate revocation reason: %s (%d)",
+			OCSP_crl_reason_str(crl_reason), crl_reason);
+		return;
+
+	case V_OCSP_CERTSTATUS_UNKNOWN:
+	default:
+		warnx("certificate status unknown(%d):%s",
+			cert_status, OCSP_cert_status_str(cert_status));
 		return;
 	}
 
-	time_t	valid = 0;
-	if (nextupdate)
-	{
-		valid = stapling_time(nextupdate);
-		if (valid == (time_t)-1) 
-		{
-			warnx("invalid nextUpdate time in certificate status");
-			return;
-		}
-
-	}
 
 	write_response(ocsp.get());
 
